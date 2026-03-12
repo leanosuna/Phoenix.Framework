@@ -4,15 +4,14 @@ namespace Phoenix.Rendering.Animation
 {
     public class AnimatorNode
     {
-        public string Name;
-        public int Level;
-        public Matrix4x4 BindTransform { get; private set; }
-        public Matrix4x4 Transform { get; set; } = Matrix4x4.Identity;
+        public string Name { get; internal set; } = "";
+        public Matrix4x4 BindTransform { get; internal set; } = Matrix4x4.Identity;
+        public Matrix4x4 Transform { get; internal set; } = Matrix4x4.Identity;
 
-        public Matrix4x4 Offset { get; private set; }
-        public int ParentID { get; private set; }
-        public int ModelBoneID { get; private set; }
-        public bool IsBone { get; private set; }
+        public Matrix4x4 Offset { get; internal set; } = Matrix4x4.Identity;
+        public int ParentID { get; internal set; }
+        public int ModelBoneID { get; internal set; }
+        public bool IsBone { get; internal set; }
 
         public AnimatorNode(Matrix4x4 transform, int parentID, int modelBoneID, Matrix4x4 offset)
         {
@@ -30,6 +29,11 @@ namespace Phoenix.Rendering.Animation
             ModelBoneID = -1;
             IsBone = false;
             Offset = Matrix4x4.Identity;
+        }
+
+        public AnimatorNode()
+        {
+
         }
     }
 }

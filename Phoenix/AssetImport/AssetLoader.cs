@@ -17,7 +17,7 @@ namespace Phoenix.AssetImport
         //private static readonly Dictionary<string, BinaryShader> _loadedShaders = new();
 
         private static AssetManifest _assetManifest = default!;
-        internal static GL GL;
+        internal static GL GL = default!;
         public static void Init(GL gl, string path = ManifestDefaultPath)
         {
             GL=gl;

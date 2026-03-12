@@ -22,7 +22,7 @@ namespace Phoenix.AssetImport.Model
         private uint _indicesLength;
         GL GL;
         private MeshAttributes _attributes;
-        public unsafe BinaryMesh(string name, Vertex[] vertices, uint[] indices, Matrix4x4 transform)
+        public unsafe BinaryMesh(string name, Vertex[] vertices, uint[] indices, Matrix4x4 transform, bool isAnimated)
         {
             GL = AssetLoader.GL;
             Name = name;
@@ -32,9 +32,17 @@ namespace Phoenix.AssetImport.Model
 
             _VAHandle = GL.GenVertexArray();
             GL.BindVertexArray(_VAHandle);
-            _attributes =   MeshAttributes.Position3D |
-                            MeshAttributes.TexCoord |
-                            MeshAttributes.Normals;
+            _attributes =   
+                isAnimated?
+                MeshAttributes.Position3D |
+                MeshAttributes.TexCoord |
+                MeshAttributes.Normals | 
+                MeshAttributes.boneIds |
+                MeshAttributes.boneWeights
+                :
+                MeshAttributes.Position3D |
+                MeshAttributes.TexCoord |
+                MeshAttributes.Normals;
 
             _VBhandle = GL.GenBuffer();
             GL.BindBuffer(BufferTargetARB.ArrayBuffer, _VBhandle);

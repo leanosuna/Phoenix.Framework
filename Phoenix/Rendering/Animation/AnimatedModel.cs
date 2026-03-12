@@ -126,7 +126,7 @@ namespace Phoenix.Rendering.Animation
                 {
                     var an = new AnimatorNode(node.Transform, parentID, info.ID, info.Offset);
                     an.Name = node.Name.TrimBoneName();
-                    an.Level = level;
+                    //an.Level = level;
                     _animatorNodes.Add(an);
                 }
             }
@@ -134,7 +134,7 @@ namespace Phoenix.Rendering.Animation
             {
                 var an = new AnimatorNode(node.Transform, parentID);
                 an.Name = node.Name.TrimBoneName();
-                an.Level = level;
+                //an.Level = level;
                 _animatorNodes.Add(an);
             }
 
@@ -253,20 +253,31 @@ namespace Phoenix.Rendering.Animation
                 PrintHierarchy(node->MChildren[i], level + 1);
             }
         }
+        private int TabCount(int pid)
+        {
+            if (pid == -1 || pid == 0)
+                return 0;
+
+            return TabCount(_animatorNodes[pid].ParentID) + 1;
+
+        }
+        
         private unsafe void PrintFlattened()
         {
+            Log.Debug("[Animator Nodes] AM");
             for (var i = 0; i < _animatorNodes.Count; i++)
             {
                 var node = _animatorNodes[i];
                 var str = node.IsBone ? "B" : "N";
                 var spc = "";
-                for (var j = 0; j < node.Level; j++)
+                for (var j = 0; j < TabCount(node.ParentID); j++)
                 {
                     spc += "-";
                 }
                 str += $"{i}{spc} PID {node.ParentID}, MID {node.ModelBoneID}, {node.Name}";
                 Log.Debug(str);
             }
+            Log.Debug("---");
         }
         private unsafe void PrintFoldedHierachy(ModelBoneHierarchyNode node, int parentID)
         {

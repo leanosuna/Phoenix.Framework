@@ -44,6 +44,28 @@ namespace Phoenix.Rendering.Animation
                 Transforms[b] = Matrix4x4.Identity;
             }
             Reset();
+
+            //Log.Debug($"[AM ANIMATION KEYFRAMES]");
+            //Log.Debug($"bc {_boneCount}");
+            
+            //Log.Debug($"name {Name}");
+            //Log.Debug($"d {Duration}");
+            //Log.Debug($"tps {TicksPerSecond}");
+
+            //for (var b = 0; b < _boneCount; b++)
+            //{
+            //    var boneKeyFrames = _keyframes[b];
+            //    var keyFramesLen = boneKeyFrames.Length;
+            //    Log.Debug($"b{b} kf {keyFramesLen}");
+            //    for (var k = 0; k < keyFramesLen; k++)
+            //    {
+            //        var keyFrame = boneKeyFrames[k];
+                    
+            //        Log.Debug($"b{b} rot {keyFrame.TimeStamp} {keyFrame.SRT.Rotation.ToStr()}");
+            //    }
+            //}
+
+            
         }
 
         unsafe Keyframe[][] ReadKeyFrames(Silk.NET.Assimp.Animation* anim, Model model)

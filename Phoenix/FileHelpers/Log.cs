@@ -131,6 +131,14 @@ namespace Phoenix
 
             return sb.ToString();
         }
+        public static string ToStrF2(this Vector4 v)
+        {
+            return $"({v.X.ToStrF2()}, {v.Y.ToStrF2()}, {v.Z.ToStrF2()}, {v.W.ToStrF2()})";
+        }
+        public static string ToStrInt(this Vector4 v)
+        {
+            return $"({v.X.ToStrInt()}, {v.Y.ToStrInt()}, {v.Z.ToStrInt()}, {v.W.ToStrInt()})";
+        }
 
         public static string ToStrF2(this Vector3 v)
         {
