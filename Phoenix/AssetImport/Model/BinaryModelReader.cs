@@ -21,14 +21,14 @@ namespace Phoenix.AssetImport.Model
             var isAnimated = br.ReadBoolean();
             
             var partsCount = br.ReadInt32();
-            Log.Debug($"parts {partsCount}");
+            //Log.Debug($"parts {partsCount}");
 
             List<BinaryModelPart> parts = new List<BinaryModelPart>();
             for (int p = 0; p < partsCount; p++)
             {
                 var partName = br.ReadString();
                 var meshCount = br.ReadInt32();
-                Log.Debug($"part {partName}");
+                //Log.Debug($"part {partName}");
 
                 List<BinaryMesh> meshes = new List<BinaryMesh>();
                 for (int m = 0; m < meshCount; m++)
@@ -42,7 +42,7 @@ namespace Phoenix.AssetImport.Model
                     var verticesLength = br.ReadInt32();
                     var vertices = br.ReadArray<Vertex>(verticesLength);
 
-                    Log.Debug($"m {meshName}");
+                    //Log.Debug($"m {meshName}");
                     var tv = vertices[0];
                     //Log.Debug($"test w{tv.Weights} bid {tv.BoneIds}");
 
@@ -77,7 +77,7 @@ namespace Phoenix.AssetImport.Model
                 igt = br.ReadStruct<Matrix4x4>();
 
                 var nodeCount = br.ReadInt32();
-                Log.Debug($"nodes {nodeCount}");
+                //Log.Debug($"nodes {nodeCount}");
                 for (var i = 0; i < nodeCount; i++)
                 {
                     var name = br.ReadString();
@@ -109,16 +109,16 @@ namespace Phoenix.AssetImport.Model
                 var animCount = br.ReadInt32();
                 boneCount = br.ReadInt32();
                 
-                Log.Debug($"bc {boneCount}");
+                //Log.Debug($"bc {boneCount}");
                 for (var i = 0; i < animCount; i++)
                 {
                     var name = br.ReadString();
                     var duration = br.ReadSingle();
                     var tps = br.ReadSingle();
 
-                    Log.Debug($"name {name}");
-                    Log.Debug($"d {duration}");
-                    Log.Debug($"tps {tps}");
+                    //Log.Debug($"name {name}");
+                    //Log.Debug($"d {duration}");
+                    //Log.Debug($"tps {tps}");
 
 
                     Keyframe[][] keyFrames = new Keyframe[boneCount][];
@@ -128,14 +128,14 @@ namespace Phoenix.AssetImport.Model
                         var keyFramesLen = br.ReadInt32();
                         keyFrames[b] = new Keyframe[keyFramesLen];
 
-                        Log.Debug($"b{b} kf {keyFramesLen}");
+                        //Log.Debug($"b{b} kf {keyFramesLen}");
                         for (var k = 0; k < keyFramesLen; k++)
                         {
                             var timeStamp = br.ReadSingle();
                             var srt = br.ReadStruct<TransformStruct>();
 
                             keyFrames[b][k] = new Keyframe(timeStamp, srt.Scale, srt.Rotation, srt.Translation);
-                            Log.Debug($"b{b} rot {timeStamp} {srt.Rotation.ToStr()}");
+                            //Log.Debug($"b{b} rot {timeStamp} {srt.Rotation.ToStr()}");
                         }
                     }
                     animations.Add(new BinaryAnimation(name, duration, tps, keyFrames));
