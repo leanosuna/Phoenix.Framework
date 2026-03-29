@@ -17,8 +17,6 @@ namespace Phoenix.Rendering.Gizmos
         public bool Enabled { get; set; } = true;
         GLShader _shader;
         List<GizmoGeometryInstance> _drawList = new();
-        Matrix4x4 _view = Matrix4x4.Identity;
-        Matrix4x4 _proj = Matrix4x4.Identity;
 
         private GGCube _cubeGeometry;
         private GGLineSegment _lineGeometry;
@@ -68,8 +66,6 @@ namespace Phoenix.Rendering.Gizmos
                 _shader.SetUniform("uWorld", gizmoInstance.World);
                 _shader.SetUniform("uColor", gizmoInstance.Color);
                 _shader.SetUniform("uHit", gizmoInstance.Hit);
-                //_shader.SetUniform("uView", game.Camera.View);
-                //_shader.SetUniform("uProjection", game.Camera.Projection);
 
                 gizmoInstance.Geometry.Draw();
             }

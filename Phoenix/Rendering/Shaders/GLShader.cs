@@ -1,5 +1,5 @@
-using Silk.NET.OpenGL;
 using Phoenix.Rendering.Textures;
+using Silk.NET.OpenGL;
 using System.Numerics;
 
 namespace Phoenix.Rendering.Shaders
@@ -13,8 +13,6 @@ namespace Phoenix.Rendering.Shaders
 
         private Dictionary<string, int> uniformLocations = new Dictionary<string, int>();
 
-
-        //public static APIVersion APIVersion { get; set; }
         public GLShader(GL glContext, string path, bool ignoreUniformsNotFound = false) :
             this(glContext, $"{path}.vert", $"{path}.frag", ignoreUniformsNotFound)
         {
@@ -170,16 +168,6 @@ namespace Phoenix.Rendering.Shaders
         {
             GL.DeleteProgram(_handle);
         }
-        //Experimental automatic version insert
-        //private string ApiVersionInsert()
-        //{
-        //    var minorIsOneDigit = APIVersion.MinorVersion / 10 == 0;
-        //    var version = $"{APIVersion.MajorVersion}{APIVersion.MinorVersion}";
-
-        //    if (minorIsOneDigit) version += "0";
-
-        //    return $"#version {version} core";
-        //}
 
         private uint LoadShader(ShaderType type, string path)
         {

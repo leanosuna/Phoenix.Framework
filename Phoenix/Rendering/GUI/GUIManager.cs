@@ -1,4 +1,6 @@
 ﻿using ImGuiNET;
+using Phoenix.AssetImport;
+using Phoenix.Rendering.Textures;
 using Silk.NET.OpenGL;
 using Silk.NET.OpenGL.Extensions.ImGui;
 using System.Numerics;
@@ -130,31 +132,26 @@ namespace Phoenix.Rendering.GUI
 
             drawList.AddText(new Vector2(position.X - textSize.X, position.Y), ImGui.ColorConvertFloat4ToU32(color), text);
         }
-        public void DrawImg(string name, string path, Vector2 position, Vector2 size)
+        public void DrawImg(string name,Vector2 position, Vector2 size)
         {
-            DrawImg(name, path, position, size, Vector2.Zero, Vector2.One);
+            DrawImg(name, position, size, Vector2.Zero, Vector2.One);
         }
-        public void DrawImg(string name, string path, Vector2 position, Vector2 size, Vector2 uvMin, Vector2 uvMax)
+        public void DrawImg(string name, Vector2 position, Vector2 size, Vector2 uvMin, Vector2 uvMax)
         {
-            uint texID = _game.TextureManager.GetOrLoadTexture(name, path);
+            uint texID = AssetLoader.LoadTexture(name).Handle;
 
             var drawList = ImGui.GetForegroundDrawList();
             drawList.AddImage((nint)texID, position, position + size, uvMin, uvMax);
         }
-
-        public void DrawImgUnsafe(string name, Vector2 position, Vector2 size)
+        public void DrawImg(uint texId, Vector2 position, Vector2 size, Vector2 uvMin, Vector2 uvMax)
         {
-            DrawImgUnsafe(name, position, size, Vector2.Zero, Vector2.One);
-        }
-        public void DrawImgUnsafe(string name, Vector2 position, Vector2 size, Vector2 uvMin, Vector2 uvMax)
-        {
-            uint? tex = _game.TextureManager.GetTexture(name);
-            if (!tex.HasValue)
-            {
-                throw new Exception($"texture {name} not found");
-            }
             var drawList = ImGui.GetForegroundDrawList();
-            drawList.AddImage((nint)tex.Value, position, position + size, uvMin, uvMax);
+            drawList.AddImage((nint)texId, position, position + size, uvMin, uvMax);
+        }
+        public void DrawImg(GLTexture tex, Vector2 position, Vector2 size, Vector2 uvMin, Vector2 uvMax)
+        {
+            var drawList = ImGui.GetForegroundDrawList();
+            drawList.AddImage((nint)tex.Handle, position, position + size, uvMin, uvMax);
         }
 
         public void DrawSimpleButton(string name, Vector2 position, Vector2 size, Action action)
@@ -174,7 +171,6 @@ namespace Phoenix.Rendering.GUI
         {
             _buttonId = 0;
             _controller.Update((float)delta);
-            //ImGui.NewFrame();
         }
         public void Render()
         {

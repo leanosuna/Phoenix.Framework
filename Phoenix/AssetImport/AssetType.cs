@@ -1,0 +1,14 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
+
+namespace Phoenix.AssetImport
+{
+    public enum AssetType
+    {
+        Model,
+        Texture,
+        Shader,
+        Unknown
+    }
+}

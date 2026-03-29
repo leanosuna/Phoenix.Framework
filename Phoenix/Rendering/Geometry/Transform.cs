@@ -1,6 +1,9 @@
-﻿using System.Numerics;
+﻿using System;
+using System.Collections.Generic;
+using System.Numerics;
+using System.Text;
 
-namespace Phoenix.Rendering.Animation
+namespace Phoenix.Rendering.Geometry
 {
     public class Transform
     {

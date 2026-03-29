@@ -1,23 +1,22 @@
-﻿using Silk.NET.Assimp;
-using Silk.NET.OpenGL;
+﻿using Silk.NET.OpenGL;
 using System.Numerics;
 
 namespace Phoenix.Rendering.RT
 {
     public class RenderTarget
     {
-        public string Name { get; private set; }
+        public string Name { get; private set; } = default!;
         public uint FrameBuffer
         {
             get;
             internal set;
         } = uint.MaxValue;
         internal bool IsBound => FrameBuffer != uint.MaxValue;
-        public RenderTexture[] RenderTextures { get; internal set; }
+        public RenderTexture[] RenderTextures { get; internal set; } = default!;
         public int TexturesCount => RenderTextures.Length;
 
-        internal GL GL;
-        public DepthBuffer DepthBuffer { get; internal set; }
+        private GL GL = default!;
+        public DepthBuffer DepthBuffer { get; internal set; } = default!;
         internal RenderTarget(GL gl, string name, uint handle, RenderTexture[] targets)
         {
             Name = name;
@@ -25,6 +24,8 @@ namespace Phoenix.Rendering.RT
             FrameBuffer = handle;
             RenderTextures = targets;
         }
+
+        
         /// <summary>
         /// Copies the color buffer of a render target to the screen.
         /// </summary>

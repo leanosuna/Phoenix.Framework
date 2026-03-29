@@ -1,10 +1,8 @@
-﻿using Silk.NET.Assimp;
+﻿using Phoenix.Rendering.Textures;
 using Silk.NET.OpenGL;
-using Phoenix.Rendering.Textures;
 using System.Globalization;
-using System.Linq;
 using System.Numerics;
-using static System.Net.Mime.MediaTypeNames;
+using System.Xml.Linq;
 
 namespace Phoenix.Rendering.RT
 {
@@ -21,51 +19,45 @@ namespace Phoenix.Rendering.RT
             GL = game.GL;
         }
 
-        string GenName() 
+        public RTBuilder BuildRT()
+        {
+            return new RTBuilder(this);
+        }
+        public RTTBuilder BuildRTT()
+        {
+            return new RTTBuilder(GL);
+        }
+        private string GenName() 
         {
             var name = $"rt-{_rtGenNameCount}";
             _rtGenNameCount ++;
+
             return name;
         }
-        public RenderTarget CreateRenderTarget(Vector2 size)
+        
+        public RenderTarget BuildDefault()
         {
-            RenderTexture tex = new RenderTexture(size);
-            return CreateRenderTarget(GenName(),[tex], null);
+            return BuildRT()
+                .AddTexture(new RenderTexture(GL))
+                .SetDepthBuffer(new DepthBuffer())
+                .Build();
         }
 
-        public RenderTarget CreateRenderTarget()
-        {
-            RenderTexture tex = new RenderTexture();
-            return CreateRenderTarget(GenName(),[tex], null);
-        }
 
-        public RenderTarget CreateRenderTarget(string name, List<RenderTexture> targetTextures)
+        internal RenderTarget CreateRenderTarget(RenderTargetInfo info)
         {
-            return CreateRenderTarget(name,targetTextures, null);
-        }
-        public RenderTarget CreateRenderTarget(string name, Vector2 size)
-        {
-            RenderTexture tex = new RenderTexture(size);
-            return CreateRenderTarget(name, [tex], null);
-        }
-
-        public RenderTarget CreateRenderTarget(string name)
-        {
-            RenderTexture tex = new RenderTexture();
-            return CreateRenderTarget(name, [tex], null);
-        }
-
-        public RenderTarget CreateRenderTarget(List<RenderTexture> targetTextures)
-        {
-            return CreateRenderTarget(GenName(), targetTextures, null);
-        }
-
-        public unsafe RenderTarget CreateRenderTarget(string name, List<RenderTexture> targetTextures, DepthBuffer? depthBuffer)
-        {
+            var name = info.Name;
+            if(string.IsNullOrEmpty(name))
+                name = GenName();
             if (_renderTargets.ContainsKey(name))
-            {
                 throw new Exception($"targets cant have the same name {name}");
-            }
+            
+
+            var targetTextures = info.Textures;
+            if(targetTextures.Count == 0) 
+                targetTextures.Add(BuildRTT().Build());
+
+            var depthBuffer = info.DepthBuffer;
 
             GL.GenFramebuffers(1, out uint rtFrameBuffer);
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, rtFrameBuffer);
@@ -74,7 +66,9 @@ namespace Phoenix.Rendering.RT
 
             CreateRenderTextures(targetTextures);
 
-            if(depthBuffer != null)
+            var rtSize = targetTextures[0].Texture.Size;
+
+            if (depthBuffer is not null)
             {
                 if (depthBuffer.FollowsWindowSize)
                     depthBuffer.Size = _game.WindowSize;
@@ -82,19 +76,23 @@ namespace Phoenix.Rendering.RT
                 GL.GenRenderbuffers(1, out uint rboDepth);
                 depthBuffer.Handle = rboDepth;
                 GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, rboDepth);
-                GL.RenderbufferStorage(GLEnum.Renderbuffer, depthBuffer.Format, depthBuffer.Width, depthBuffer.Height);
+                //TODO: verify if depthBuffer size necessary
+                GL.RenderbufferStorage(GLEnum.Renderbuffer, depthBuffer.Format, (uint)rtSize.X, (uint)rtSize.Y);
 
                 GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, FramebufferAttachment.DepthStencilAttachment, RenderbufferTarget.Renderbuffer, rboDepth);
 
             }
+            var status = GL.CheckFramebufferStatus(FramebufferTarget.Framebuffer);
+            if (status != GLEnum.FramebufferComplete)
+                throw new Exception($"Framebuffer incomplete: {status}");
 
-            // unbind and tidy
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
             GL.BindTexture(TextureTarget.Texture2D, 0);
             GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0);
 
+
             var rt = new RenderTarget(GL, name, rtFrameBuffer, targetTextures.ToArray());
-            
+
             rt.DepthBuffer = depthBuffer;
             _renderTargets.Add(name.ToLower(CultureInfo.InvariantCulture), rt);
 
@@ -104,6 +102,7 @@ namespace Phoenix.Rendering.RT
 
             return rt;
         }
+
 
         public RenderTarget FindByName(string name)
         {
@@ -125,27 +124,17 @@ namespace Phoenix.Rendering.RT
             {
                 var tex = targetTextures[i];
 
+                var size = tex.Size;
                 if (tex.FollowsWindowSize)
-                    tex.Size = _game.WindowSize;
+                    size = _game.WindowSize;
 
-                tex.texture = new GLTexture(GL, 
-                    tex.Width, 
-                    tex.Height, 
-                    out var handle, 
-                    tex.Format, 
-                    tex.WrapS, 
-                    tex.WrapT, 
-                    tex.MinFilter, 
-                    tex.MagFilter, 
-                    false, 0, 0);
-
-                tex.Handle = handle;
+                tex.Texture.Resize(size);
                 
                 var att = FramebufferAttachment.ColorAttachment0 + i;
                 var cAtt = GLEnum.ColorAttachment0 + i;
                 attachments[i] = cAtt;
                 GL.FramebufferTexture2D(FramebufferTarget.Framebuffer,
-                    att, TextureTarget.Texture2D, handle, 0);
+                    att, TextureTarget.Texture2D, tex.Texture.Handle, 0);
 
             }
             GL.DrawBuffers(targetCount, attachments);
@@ -161,6 +150,9 @@ namespace Phoenix.Rendering.RT
                 throw new Exception($"target not bound (its handle is uint.MaxValue)");
 
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, target.FrameBuffer);
+
+            var size = target.RenderTextures[0].Texture.Size;
+            GL.Viewport(0, 0, (uint)size.X, (uint)size.Y);
         }
         /// <summary>
         /// Selects the screen as GL output 
@@ -169,7 +161,7 @@ namespace Phoenix.Rendering.RT
         public void RenderToScreen()
         {
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
-
+            GL.Viewport(0, 0, (uint)_game.WindowSize.X, (uint)_game.WindowSize.Y);
         }
 
         public unsafe void HandleWindowResize()
@@ -182,22 +174,9 @@ namespace Phoenix.Rendering.RT
                 {
                     if(tex.FollowsWindowSize)
                     {
-                        tex.Size = _game.WindowSize * tex.SizeMultiplier;
+                        var size = _game.WindowSize * tex.SizeMultiplier;
 
-                        GL.BindTexture(TextureTarget.Texture2D, tex.Handle);
-
-                        tex.texture.Size = tex.Size;
-
-                        GL.TexImage2D(
-                            TextureTarget.Texture2D,
-                            0,
-                            (int)tex.Format,
-                            tex.Width,
-                            tex.Height,
-                            0,
-                            PixelFormat.Rgba,
-                            PixelType.UnsignedByte,
-                            null);
+                        tex.Texture.Resize(size);
 
                     }
 

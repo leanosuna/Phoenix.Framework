@@ -1,4 +1,5 @@
-﻿using Silk.NET.Maths;
+﻿using System.Numerics;
+using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 using Silk.NET.Windowing;
 using Phoenix.Cameras;
@@ -11,7 +12,7 @@ using Phoenix.Rendering.RT;
 using Phoenix.Rendering.Textures;
 using Phoenix.Rendering.Shaders;
 using Phoenix.Sound;
-using System.Numerics;
+using Phoenix.AssetImport;
 
 namespace Phoenix
 {
@@ -26,7 +27,6 @@ namespace Phoenix
         public InputManager InputManager { get; private set; } = default!;
         public FullScreenQuad FullScreenQuad { get; private set; } = default!;
         public RTManager RTManager { get; private set; } = default!;
-        public TextureManager TextureManager { get; private set; } = default!;
         public Gizmos Gizmos { get; private set; } = default!;
         public GUIManager GUIManager { get; private set; } = default!;
         public SoundManager SoundManager { get; private set; } = default!;
@@ -158,11 +158,11 @@ namespace Phoenix
         private void DelayedLoad()
         {
             FullScreenQuad = new FullScreenQuad(this);
-            TextureManager = new TextureManager(this);
             RTManager = new RTManager(this);
             Gizmos = new Gizmos(this);
             SoundManager = new SoundManager();
             //NetworkManager = new NetworkManager(this);
+            AssetLoader.Init(this);
 
             // User defined Initialize
             Initialize();

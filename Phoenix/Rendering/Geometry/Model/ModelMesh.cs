@@ -1,62 +1,42 @@
+﻿using Phoenix.AssetImport;
 using Silk.NET.OpenGL;
-using Phoenix.Rendering.Textures;
 using System.Numerics;
-using Phoenix.Rendering.Shaders;
-using Silk.NET.Maths;
 
-namespace Phoenix.Rendering.Geometry
+namespace Phoenix.Rendering.Geometry.Model
 {
-    public class Mesh : IDisposable
+    public class ModelMesh
     {
-
-        public Mesh(GL gl, MeshAttributes attributes, 
-            List<Vertex> vertices, uint[] indices, 
-            
-            bool saveVerticesIndices = false)
-        {
-            GL = gl;
-            _attributes = attributes;
-            if (saveVerticesIndices)
-            {
-                Vertices = vertices.ToArray();
-                Indices = indices;
-            }
-            VerticesIndicesSaved = saveVerticesIndices;
-            SetupMesh(indices, vertices);
-        }
-        public bool VerticesIndicesSaved { get; private set; }
-        public Vertex[] Vertices { get; private set; }
-        public uint[] Indices { get; private set; }
-
         public Matrix4x4 Transform { get; internal set; }
         public string Name { get; internal set; } = string.Empty;
-        public Box3D<float> AABB { get; internal set; }
-        public uint NumFaces { get; internal set; }
-        public uint MaterialIndex { get; internal set; }
-        //public IReadOnlyList<GLTexture> Textures { get; private set; }
-        private VertexArrayObject<float, uint> VAO { get; set; } = default!;
-        public uint IndicesLength { get; private set; } = default!;
-        public uint VerticesLength { get; private set; } = default!;
-
-        GL GL { get; }
-
-        GLShader _shader = default!;
-        bool _shouldThrowIfNotCurrent = false;
-
+        
         BufferObject<uint> EBO = default!;
         uint _VAHandle;
         uint _VBhandle;
 
-        public Action? PreDraw { get; set; } = null;
-
+        private uint _indicesLength;
+        GL GL;
         private MeshAttributes _attributes;
-        private unsafe void SetupMesh(uint[] indices, List<Vertex> vertices)
+        public unsafe ModelMesh(GL gl, string name, Vertex[] vertices, uint[] indices, Matrix4x4 transform, bool isAnimated)
         {
-            IndicesLength = (uint)indices.Length;
-            VerticesLength = (uint)vertices.Count;
+            GL = gl;
+            Name = name;
+            Transform = transform;
+
+            _indicesLength = (uint)indices.Length;
 
             _VAHandle = GL.GenVertexArray();
             GL.BindVertexArray(_VAHandle);
+            _attributes =   
+                isAnimated?
+                MeshAttributes.Position3D |
+                MeshAttributes.TexCoord |
+                MeshAttributes.Normals | 
+                MeshAttributes.boneIds |
+                MeshAttributes.boneWeights
+                :
+                MeshAttributes.Position3D |
+                MeshAttributes.TexCoord |
+                MeshAttributes.Normals;
 
             _VBhandle = GL.GenBuffer();
             GL.BindBuffer(BufferTargetARB.ArrayBuffer, _VBhandle);
@@ -73,11 +53,20 @@ namespace Phoenix.Rendering.Geometry
 
             SetVAOAttributes(attdata);
 
-            // unbind VAO, VBO, EBO
             GL.BindVertexArray(0);
-            //GL.BindBuffer(BufferTargetARB.ArrayBuffer, 0);
-            //GL.BindBuffer(BufferTargetARB.ElementArrayBuffer, 0);
         }
+
+        public unsafe void Draw()
+        {
+            //if (_shader != default!)
+            //    if (!_shader.IsCurrent() && _shouldThrowIfNotCurrent)
+            //        throw new Exception($"Linked shader for this mesh is not the current one.");
+
+            //bind VAO
+            GL.BindVertexArray(_VAHandle);
+            GL.DrawElements(PrimitiveType.Triangles, _indicesLength, DrawElementsType.UnsignedInt, null);
+        }
+
 
         unsafe void SetVAOAttributes((int strideBytes, List<(MeshAttributes attr, int components, int bytes, bool isInt)> layout) attdata)
         {
@@ -108,10 +97,10 @@ namespace Phoenix.Rendering.Geometry
 
         }
 
-        private (byte[], int) PushData(List<Vertex> vertices, int strideBytes,
+        private (byte[], int) PushData(Vertex[] vertices, int strideBytes,
             List<(MeshAttributes attr, int components, int bytes, bool isInt)> layout)
         {
-            var vertexCount = vertices.Count;
+            var vertexCount = vertices.Length;
             var totalBytes = strideBytes * vertexCount;
             var data = new byte[totalBytes];
             int byteOffset = 0;
@@ -191,32 +180,6 @@ namespace Phoenix.Rendering.Geometry
             byteOffset += byteCount;
         }
 
-        public void LinkToShader(GLShader shader, bool shouldThrowIfNotCurrent = true)
-        {
-            _shader = shader;
-            _shouldThrowIfNotCurrent = shouldThrowIfNotCurrent;
-        }
-        public unsafe void Draw()
-        {
-            if (_shader != default!)
-                if (!_shader.IsCurrent() && _shouldThrowIfNotCurrent)
-                    throw new Exception($"Linked shader for this mesh is not the current one.");
-            
-            //bind VAO
-            GL.BindVertexArray(_VAHandle);
-
-            //GL.BindBuffer(BufferTargetARB.ArrayBuffer, _VBhandle);
-            //EBO.Bind();
-            GL.DrawElements(PrimitiveType.Triangles, IndicesLength, DrawElementsType.UnsignedInt, null);
-        }
-
-        public void Dispose()
-        {
-            EBO.Dispose();
-            GL.DeleteBuffer(_VBhandle);
-            GL.DeleteVertexArray(_VAHandle);
-        }
-
         public static int ItemCountOfAttribute(MeshAttributes attr)
         {
             switch (attr)
@@ -230,9 +193,9 @@ namespace Phoenix.Rendering.Geometry
                 case MeshAttributes.Bitangents:
                     return 3;
                 case MeshAttributes.boneIds:
-                    return Vertex.MAX_BONE_INFLUENCE;
+                    return 4;
                 case MeshAttributes.boneWeights:
-                    return Vertex.MAX_BONE_INFLUENCE;
+                    return 4;
                 default:
                     return -1;
             }
@@ -251,9 +214,9 @@ namespace Phoenix.Rendering.Geometry
                 case MeshAttributes.Bitangents:
                     return 3 * sizeof(float);
                 case MeshAttributes.boneIds:
-                    return Vertex.MAX_BONE_INFLUENCE * sizeof(int);
+                    return 4 * sizeof(int);
                 case MeshAttributes.boneWeights:
-                    return Vertex.MAX_BONE_INFLUENCE * sizeof(float);
+                    return 4 * sizeof(float);
 
                 default:
                     return -1;
@@ -279,30 +242,6 @@ namespace Phoenix.Rendering.Geometry
                 default:
                     return VertexAttribPointerType.Float;
             }
-        }
-
-        float[] ToFloatArray(Vector3 vector)
-        {
-            return [vector.X, vector.Y, vector.Z];
-        }
-        float[] ToFloatArray(Vector2 vector)
-        {
-            return [vector.X, vector.Y];
-        }
-
-        public List<float[]> ToFloatArrayList(List<Vector3> vectors)
-        {
-            var fs = new List<float[]>();
-
-            foreach (var v in vectors)
-            {
-                float[] floats = [v.X, v.Y, v.Z];
-
-                fs.Add(floats);
-            }
-
-
-            return fs;
         }
 
     }
