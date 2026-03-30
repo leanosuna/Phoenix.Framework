@@ -29,7 +29,6 @@ namespace Phoenix
         public RTManager RTManager { get; private set; } = default!;
         public Gizmos Gizmos { get; private set; } = default!;
         public GUIManager GUIManager { get; private set; } = default!;
-        public SoundManager SoundManager { get; private set; } = default!;
         public NetworkManager NetworkManager { get; private set; } = default!;
         public Camera Camera { get; set; } = default!;
         public double Time { get; private set; } = 0;
@@ -160,7 +159,7 @@ namespace Phoenix
             FullScreenQuad = new FullScreenQuad(this);
             RTManager = new RTManager(this);
             Gizmos = new Gizmos(this);
-            SoundManager = new SoundManager();
+            SoundManager.Initialize();
             //NetworkManager = new NetworkManager(this);
             AssetLoader.Init(this);
 
@@ -278,7 +277,7 @@ namespace Phoenix
         }
         private void InternalOnClose()
         {
-            SoundManager.Dispose();
+            SoundManager.Shutdown();
             OnClose();
         }
 

@@ -1,48 +1,53 @@
-﻿using IrrKlang;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Silk.NET.OpenAL;
+using System.Numerics;
 
 namespace Phoenix.Sound
 {
-    public class SoundInstance
+    public sealed class SoundInstance : IDisposable
     {
-        internal ISound ISound { get; }
+        private readonly AL _al;
+        internal uint SourceId { get; }
+        private bool _disposed;
 
-        public bool Loop { get; }
-        public bool StartPaused { get; }
-
-        public float Volume
+        internal SoundInstance(AL al, uint sourceId)
         {
-            get => ISound.Volume;
-            set => ISound.Volume = value;
-        }
-        public float Speed
-        {
-            get => ISound.PlaybackSpeed;
-            set => ISound.PlaybackSpeed = value;
-        }
-        public bool IsFinished => ISound.Finished;
-        
-        public bool Paused
-        {
-            get => ISound.Paused;
-            set => ISound.Paused = value;
+            _al = al;
+            SourceId = sourceId;
         }
 
-        public SoundInstance(ISound iSound, bool loop, bool startPaused)
+        public void Play() => _al.SourcePlay(SourceId);
+        public void Pause() => _al.SourcePause(SourceId);
+        public void Stop() => _al.SourceStop(SourceId);
+
+        public void SetVolume(float volume)
+            => _al.SetSourceProperty(SourceId, SourceFloat.Gain, Math.Clamp(volume, 0f, 1f));
+
+        public void SetPitch(float pitch)
+            => _al.SetSourceProperty(SourceId, SourceFloat.Pitch, Math.Max(0.01f, pitch));
+
+        public void SetPosition(Vector3 position)
+            => _al.SetSourceProperty(SourceId, SourceVector3.Position, position.X, position.Y, position.Z);
+
+        public void SetVelocity(Vector3 velocity)
+            => _al.SetSourceProperty(SourceId, SourceVector3.Velocity, velocity.X, velocity.Y, velocity.Z);
+
+        public bool IsPlaying
         {
-            ISound = iSound;
-            Loop = loop;
-            StartPaused = startPaused;
-        }
-        internal void Stop()
-        {
-            ISound.Stop();
+            get
+            {
+                _al.GetSourceProperty(SourceId, GetSourceInteger.SourceState, out var state);
+                
+                return (SourceState)state == SourceState.Playing;
+            }
         }
 
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
 
+            _al.SourceStop(SourceId);
+            _al.DeleteSource(SourceId);
+        }
     }
 }
