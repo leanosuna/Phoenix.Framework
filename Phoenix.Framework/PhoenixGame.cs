@@ -12,6 +12,7 @@ using Phoenix.Framework.Rendering.RT;
 using Phoenix.Framework.Rendering.Shaders;
 using Phoenix.Framework.Sound;
 using Phoenix.Framework.AssetImport;
+using System.Drawing;
 
 namespace Phoenix.Framework
 {
@@ -278,6 +279,45 @@ namespace Phoenix.Framework
             OnClose();
         }
 
+        public void SetDepthTest(bool enable, GLEnum type = GLEnum.Less)
+        {
+            if(enable)
+            {
+                GL.Enable(EnableCap.DepthTest);
+                GL.DepthFunc(type);
+            }
+            else
+            {
+                GL.Disable(EnableCap.DepthTest);
+            }
+        }
+
+        
+        public void ClearBuffer(bool colorBit = true, bool depthBit = true, bool stencilBit = true)
+        {
+            var mask = colorBit ? ClearBufferMask.ColorBufferBit : ClearBufferMask.None;
+            mask |= depthBit ? ClearBufferMask.DepthBufferBit : ClearBufferMask.None;
+            mask |= stencilBit ? ClearBufferMask.StencilBufferBit : ClearBufferMask.None;
+
+            GL.Clear(mask);
+            
+        }
+        public void SetClearColor(Vector4 color)
+        {
+            GL.ClearColor(color.X, color.Y, color.Z, color.W);
+        }
+        public void SetClearColor(Color color)
+        {
+            GL.ClearColor(color);
+        }
+        public void SetRenderToTarget(RenderTarget target)
+        {
+            RTManager.RenderTo(target);
+        }
+        public void SetRenderToScreen()
+        {
+            RTManager.RenderToScreen();
+        }
         //public static void CheckGLError(string label)
         //{
         //    var err = GL.GetError();

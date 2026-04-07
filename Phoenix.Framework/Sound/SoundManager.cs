@@ -17,7 +17,7 @@ namespace Phoenix.Framework.Sound
 
         public static void Initialize()
         {
-            _al = AL.GetApi();
+            _al = AL.GetApi(true);
             _alc = ALContext.GetApi();
             
             _device = _alc.OpenDevice("");
