@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-    <Title>Phoenix.Framework.Framework</Title>
+    <Title>Phoenix.Framework</Title>
     <Company></Company>
     <Product></Product>
     <Authors>leanosuna</Authors>
@@ -17,7 +17,7 @@
     <ProduceReferenceAssembly>True</ProduceReferenceAssembly>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <Version>1.0.0-fix</Version>
+    <Version>1.0.1-alpha-1</Version>
   </PropertyGroup>
 
   <ItemGroup>

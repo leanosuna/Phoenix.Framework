@@ -23,30 +23,31 @@ namespace Phoenix.Framework
         public Vector2 WindowSize { get; private set; }
         public int WindowWidth => (int)WindowSize.X;
         public int WindowHeight => (int)WindowSize.Y;
-
         public InputManager InputManager { get; private set; } = default!;
         public FullScreenQuad FullScreenQuad { get; private set; } = default!;
-        public RTManager RTManager { get; private set; } = default!;
         public Gizmos Gizmos { get; private set; } = default!;
-        public GUIManager GUIManager { get; private set; } = default!;
+        public UI UI { get; private set; } = default!;
         public NetworkManager NetworkManager { get; private set; } = default!;
         public Camera Camera { get; set; } = default!;
-        public double Time { get; private set; } = 0;
-        public double FrameTime { get; private set; } = 0;
-        public double FT_SAMPLE { get; private set; } = 0;
-        public double FT_SAMPLE_RATE { get; set; } = 0.3;
-        public double FPS { get; private set; } = 0;
-        public double FPS_SAMPLE { get; private set; } = 0;
-        public double FPS_SAMPLE_RATE { get; set; } = 0.3;
+        public Graphics Graphics { get; set; } = default!;
+        
         public uint CommonUboHandle { get; private set; } = 0;
+
+        internal RTManager RTManager = default!;
+
         private CommonUBO _commonUboData;
         private bool _delayedLoadDone = false;
+        private bool _renderingHalt = false;
+        private bool _firstFrame = true;
+
+        internal RenderTarget _sceneRT;
         public PhoenixGame()
         {
             var options = WindowOptions.Default;
             options.Size = new Vector2D<int>(1600, 900);
-            options.Title = "Silk.NET OPENGL Game";
+            options.Title = "Phoenix Game";
             options.VSync = true;
+
             var glApi = new APIVersion(4, 1);
             options.API = new GraphicsAPI(ContextAPI.OpenGL, ContextProfile.Core, ContextFlags.Default, glApi);
 
@@ -58,7 +59,7 @@ namespace Phoenix.Framework
             Window.Render += InternalRender;
             Window.FramebufferResize += InternalFramebufferResize;
             Window.Closing += InternalOnClose;
-
+             
 
         }
         public PhoenixGame(WindowOptions options)
@@ -123,25 +124,49 @@ namespace Phoenix.Framework
         protected abstract void Render(double deltaTime);
 
         /// <summary>
-        /// This method gets called every time the window gets resized.
+        /// This optional method gets called every frame. UI rendering should go here.
         /// </summary>
-        /// <param name="windowSize">The new window size</param>
-        protected abstract void OnWindowResize(Vector2D<int> windowSize);
+        /// <param name="deltaTime">Time in seconds since the last Render() call</param>
+
+        protected virtual void RenderUI()
+        {
+
+        }
 
         /// <summary>
-        /// This method gets called when the game window is closed
+        /// This optional method gets called every time the window gets resized.
         /// </summary>
-        protected abstract void OnClose();
+        /// <param name="windowSize">The new window size</param>
+        protected virtual void OnWindowResize(Vector2D<int> windowSize)
+        {
+
+        }
+
+        /// <summary>
+        /// This optional method gets called when the game window is closed
+        /// </summary>
+        protected virtual void OnClose()
+        {
+
+        }
 
         private void InternalLoad()
         {
-            Log.Enabled = true;
             Log.Info("Game starting");
             Window.Center();
             GL = GL.GetApi(Window);
             
             InputManager = new InputManager(this);
-            GUIManager = new GUIManager(this);
+            UI = new UI(this);
+            RTManager = new RTManager(this);
+            _sceneRT = RTManager.BuildRT()
+                .SetName("internal-scene")
+                .AddTexture(RTManager.BuildRTT().Build())
+                .SetDepthBuffer(new DepthBuffer())
+                .Build();
+
+
+            Graphics = new Graphics(this);
 
             GenCommonUBO();
 
@@ -157,7 +182,6 @@ namespace Phoenix.Framework
         private void DelayedLoad()
         {
             FullScreenQuad = new FullScreenQuad(this);
-            RTManager = new RTManager(this);
             Gizmos = new Gizmos(this);
             SoundManager.Initialize();
             //NetworkManager = new NetworkManager(this);
@@ -167,7 +191,7 @@ namespace Phoenix.Framework
             Initialize();
             _delayedLoadDone = true;
         }
-        bool _firstFrame = true;
+        
         private void InternalUpdate(double deltaTime)
         {
             if (!_delayedLoadDone)
@@ -179,23 +203,40 @@ namespace Phoenix.Framework
                 _firstFrame = false;
                 return;
             }
-            Time += deltaTime;
+            Graphics.Time += deltaTime;
 
             InputManager.Update();
+            if(InputManager.KeyDownOnce(Graphics.RenderHaltKey))
+            {
+                if(!_renderingHalt)
+                {
+                    InputManager.SetTemporaryMouseMode(Silk.NET.Input.CursorMode.Normal);
+                }
+                else
+                {
+                    InputManager.RestoreMouseMode();
+                }
+                _renderingHalt = !_renderingHalt;
+
+            }
 
             //NetworkManager.Update();
-            if (Gizmos.Enabled)
-                Gizmos.Update();
             // User defined Update
-            Update(deltaTime);
 
-            UpdateCommonUBO(deltaTime);
+            if(!_renderingHalt)
+            {
+                if (Gizmos.Enabled)
+                    Gizmos.Update();
 
+                Update(deltaTime);
+                UpdateCommonUBO(deltaTime);
+            }
+            
         }
 
         private unsafe void UpdateCommonUBO(double dt)
         {
-            _commonUboData = new CommonUBO(Camera.View, Camera.Projection, (float)Time, (float)dt);
+            _commonUboData = new CommonUBO(Camera.View, Camera.Projection, (float)Graphics.Time, (float)dt);
             GL.BindBuffer(GLEnum.UniformBuffer, CommonUboHandle);
             fixed (void* d = & _commonUboData)
             {
@@ -211,28 +252,28 @@ namespace Phoenix.Framework
         {
             var str = "Loading game assets...";
 
-            GUIManager.DrawCenteredText(str,new Vector2(WindowSize.X / 2, WindowSize.Y / 2), Vector4.One, 30);
-            GUIManager.Render();
+            UI.DrawCenteredText(str,new Vector2(WindowSize.X / 2, WindowSize.Y / 2), Vector4.One, 30);
+            UI.Render();
         }
         double _timerSamplerFPS = 0;
         double _timerSamplerFT = 0;
 
         private void InternalRender(double deltaTime)
         {
-            FrameTime = deltaTime;
-            
-            FPS = 1.0 / deltaTime;
+            Graphics.FrameTime = deltaTime;
+
+            Graphics.FPS = 1.0 / deltaTime;
             _timerSamplerFPS += deltaTime;
             _timerSamplerFT += deltaTime;
 
-            if (_timerSamplerFPS >= FPS_SAMPLE_RATE)
+            if (_timerSamplerFPS >= Graphics.FPS_SAMPLE_RATE)
             {
-                FPS_SAMPLE = FPS;
+                Graphics.FPS_SAMPLE = Graphics.FPS;
                 _timerSamplerFPS = 0;
             }
-            if (_timerSamplerFT >= FT_SAMPLE_RATE)
+            if (_timerSamplerFT >= Graphics.FT_SAMPLE_RATE)
             {
-                FT_SAMPLE = FrameTime;
+                Graphics.FT_SAMPLE = Graphics.FrameTime;
                 _timerSamplerFT = 0;
             }
 
@@ -241,33 +282,40 @@ namespace Phoenix.Framework
                 InitialLoadScreen();
                 return;
             }
-            GUIManager.Update(deltaTime);
-            Render(deltaTime);
-            if (Gizmos.Enabled)
-                Gizmos.Render();
-            GUIManager.Render();
+            UI.Update(deltaTime);
+
+            
+            if(!_renderingHalt)
+            {
+                Graphics.SetRenderToTarget(_sceneRT);
+
+                Render(deltaTime);
+                if (Gizmos.Enabled)
+                    Gizmos.Render(); 
+            }
+            RTManager.TrueRenderToScreen();
+            Graphics.ClearRenderTarget();
+
+            var rv = Graphics.RenderViewport;
+            Graphics.TrueCopyToScreen(_sceneRT, 0,
+                new Vector4(0,0,rv.Width,rv.Height),
+                new Vector4(0,0,WindowWidth, WindowHeight), rv.Filter);
+
+            InternalRenderUI();
+            RenderUI();
+
+            UI.Render();
         }
 
-        public void SetResolution(Vector2 size, bool fullscreen)
+        private void InternalRenderUI()
         {
-            if (fullscreen)
-            {
-                Window.WindowState = WindowState.Fullscreen;
-                
-            }
-            else
-            {
-                Window.WindowState = WindowState.Normal;
-                //Window.WindowBorder = 0;
-                
-            }
-            Window.Position = Vector2D<int>.Zero;
-            Window.Size = size.To2Di();
+
         }
+        
+        
 
         private void InternalFramebufferResize(Vector2D<int> size)
         {
-            Console.WriteLine($"resize detected {size}");
             WindowSize = new Vector2(size.X, size.Y);
             GL.Viewport(size);
             RTManager.HandleWindowResize();
@@ -279,45 +327,7 @@ namespace Phoenix.Framework
             OnClose();
         }
 
-        public void SetDepthTest(bool enable, GLEnum type = GLEnum.Less)
-        {
-            if(enable)
-            {
-                GL.Enable(EnableCap.DepthTest);
-                GL.DepthFunc(type);
-            }
-            else
-            {
-                GL.Disable(EnableCap.DepthTest);
-            }
-        }
-
         
-        public void ClearBuffer(bool colorBit = true, bool depthBit = true, bool stencilBit = true)
-        {
-            var mask = colorBit ? ClearBufferMask.ColorBufferBit : ClearBufferMask.None;
-            mask |= depthBit ? ClearBufferMask.DepthBufferBit : ClearBufferMask.None;
-            mask |= stencilBit ? ClearBufferMask.StencilBufferBit : ClearBufferMask.None;
-
-            GL.Clear(mask);
-            
-        }
-        public void SetClearColor(Vector4 color)
-        {
-            GL.ClearColor(color.X, color.Y, color.Z, color.W);
-        }
-        public void SetClearColor(Color color)
-        {
-            GL.ClearColor(color);
-        }
-        public void SetRenderToTarget(RenderTarget target)
-        {
-            RTManager.RenderTo(target);
-        }
-        public void SetRenderToScreen()
-        {
-            RTManager.RenderToScreen();
-        }
         //public static void CheckGLError(string label)
         //{
         //    var err = GL.GetError();

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Phoenix.Framework.Rendering.GUI;
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 using System.Text;
@@ -14,7 +15,10 @@ namespace Phoenix.Framework.Rendering.Shaders
             _shader = shader;
             _location = shader.GetUniformLocation(name);
             if (_location == -1 && throwIfNotFound)
-                throw new Exception($"Uniform [{name}] not found");
+            {
+                ErrorListWindow.Add($"Uniform [{name}] not found");
+                return;
+            }
         }
 
         public void Set(Type value)

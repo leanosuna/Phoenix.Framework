@@ -84,5 +84,19 @@ namespace Phoenix.Framework.Input
             }
             return false;
         }
+
+        CursorMode _beforeTemp;
+        
+        internal void SetTemporaryMouseMode(CursorMode mode)
+        {
+            _beforeTemp = _input.Mice[0].Cursor.CursorMode;
+
+            SetMouseMode(mode);
+        }
+
+        internal void RestoreMouseMode()
+        {
+            SetMouseMode(_beforeTemp);
+        }
     }
 }

@@ -7,7 +7,7 @@ using System.Numerics;
 
 namespace Phoenix.Framework.Rendering.GUI
 {
-    public class GUIManager
+    public class UI
     {
         private ImGuiController _controller;
         private PhoenixGame _game;
@@ -15,7 +15,7 @@ namespace Phoenix.Framework.Rendering.GUI
         private Dictionary<int, ImFontPtr> _fonts = new Dictionary<int, ImFontPtr>();
         private int _buttonId = 0;
 
-        internal GUIManager(PhoenixGame game)
+        internal UI(PhoenixGame game)
         {
             _game = game;
             GL = game.GL;
@@ -24,6 +24,8 @@ namespace Phoenix.Framework.Rendering.GUI
             _controller = new ImGuiController(GL, game.Window, inputContext);
 
             LoadDefaultFont();
+
+            ErrorListWindow.SetUI(this);
 
         }
         public void LoadDefaultFont()
@@ -42,8 +44,11 @@ namespace Phoenix.Framework.Rendering.GUI
         public unsafe void LoadFontTTF(string path, int[] sizes)
         {
             if (sizes.Length == 0)
-                throw new Exception("must contain at least one font size");
-
+            {
+                ErrorListWindow.Add("must contain at least one font size");
+                return;
+            }
+            
             var io = ImGui.GetIO();
 
             _fonts.Clear();
@@ -81,7 +86,10 @@ namespace Phoenix.Framework.Rendering.GUI
         {
 
             if (!_fonts.TryGetValue(size, out var font))
-                throw new Exception($"font size {size} not found");
+            { 
+                ErrorListWindow.Add($"font size {size} not found");
+                return;
+            }
 
             ImGui.PushFont(font);
         }
@@ -167,15 +175,16 @@ namespace Phoenix.Framework.Rendering.GUI
 
             _buttonId++;
         }
-        public void Update(double delta)
+        internal void Update(double delta)
         {
             _buttonId = 0;
             _controller.Update((float)delta);
+            ErrorListWindow.Update((float)delta);
         }
-        public void Render()
+        internal void Render()
         {
+            ErrorListWindow.Render();
             _controller.Render();
-
         }
 
     }

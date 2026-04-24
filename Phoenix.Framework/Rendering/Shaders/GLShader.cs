@@ -1,3 +1,4 @@
+using Phoenix.Framework.Rendering.GUI;
 using Phoenix.Framework.Rendering.Textures;
 using Silk.NET.OpenGL;
 using System.Numerics;
@@ -46,7 +47,8 @@ namespace Phoenix.Framework.Rendering.Shaders
             var index = GL.GetUniformBlockIndex(_handle, uniformBlockName);
             if(index == uint.MaxValue)
             {
-                throw new Exception($"Uniform block {uniformBlockName} not found");
+                ErrorListWindow.Add($"Uniform block {uniformBlockName} not found");
+                return;
             }    
             GL.UniformBlockBinding(_handle, index, binding);
 
@@ -126,7 +128,9 @@ namespace Phoenix.Framework.Rendering.Shaders
                         GL.ProgramUniformMatrix4(_handle, location, (uint)mm.Length, false, (float*)ptr);
                     }
                     break;
-                default: throw new Exception($"{typeof(T).Name} missing GL.UniformT entry");
+                default: 
+                    ErrorListWindow.Add($"{typeof(T).Name} missing GL.UniformT entry");
+                    return;
             }
         }
         public unsafe void SetUniform<T>(string name, T value)
@@ -136,7 +140,8 @@ namespace Phoenix.Framework.Rendering.Shaders
             {
                 if (ignoreUniformsNotFound)
                     return;
-                throw new Exception($"[{name}] not found on shader.");
+                ErrorListWindow.Add($"[{name}] not found on shader.");
+                return;
             }
             SetUniform(location, value);
         }
@@ -179,7 +184,8 @@ namespace Phoenix.Framework.Rendering.Shaders
             string infoLog = GL.GetShaderInfoLog(handle);
             if (!string.IsNullOrWhiteSpace(infoLog))
             {
-                throw new Exception($"Error compiling shader of type {type}, failed with error {infoLog}");
+                ErrorListWindow.Add($"Error compiling shader of type {type}, failed with error {infoLog}");
+                return uint.MaxValue;
             }
 
             return handle;

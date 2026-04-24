@@ -1,4 +1,5 @@
-﻿using Phoenix.Framework.Sound.Decoders;
+﻿using Phoenix.Framework.Rendering.GUI;
+using Phoenix.Framework.Sound.Decoders;
 using Silk.NET.OpenAL;
 using System.Numerics;
 
@@ -23,11 +24,17 @@ namespace Phoenix.Framework.Sound
             _device = _alc.OpenDevice("");
             
             if (_device == null)
-                throw new Exception("Failed to open OpenAL device.");
+            {
+                ErrorListWindow.Add("Failed to open OpenAL device.");
+                return;
+            }
 
             _context = _alc.CreateContext(_device, null);
             if (_context == null)
-                throw new Exception("Failed to create OpenAL context.");
+            {
+                ErrorListWindow.Add("Failed to create OpenAL context.");
+                return;
+            }
 
             _alc.MakeContextCurrent(_context);
 
@@ -194,7 +201,10 @@ namespace Phoenix.Framework.Sound
         private static void EnsureInitialized()
         {
             if (_al == null || _alc == null)
-                throw new InvalidOperationException("SoundManager.Initialize() must be called first.");
+            {
+                ErrorListWindow.Add("SoundManager.Initialize() must be called first.");
+                return;
+            }
         }
     }
 }

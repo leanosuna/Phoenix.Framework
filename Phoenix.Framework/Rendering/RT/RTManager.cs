@@ -3,6 +3,7 @@ using Silk.NET.OpenGL;
 using System.Globalization;
 using System.Numerics;
 using System.Xml.Linq;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace Phoenix.Framework.Rendering.RT
 {
@@ -19,11 +20,11 @@ namespace Phoenix.Framework.Rendering.RT
             GL = game.GL;
         }
 
-        public RTBuilder BuildRT()
+        internal RTBuilder BuildRT()
         {
             return new RTBuilder(this);
         }
-        public RTTBuilder BuildRTT()
+        internal RTTBuilder BuildRTT()
         {
             return new RTTBuilder(GL);
         }
@@ -35,7 +36,7 @@ namespace Phoenix.Framework.Rendering.RT
             return name;
         }
         
-        public RenderTarget BuildDefault()
+        internal RenderTarget BuildDefault()
         {
             return BuildRT()
                 .AddTexture(new RenderTexture(GL))
@@ -104,13 +105,13 @@ namespace Phoenix.Framework.Rendering.RT
         }
 
 
-        public RenderTarget FindByName(string name)
+        internal RenderTarget FindByName(string name)
         {
             if (!_renderTargets.TryGetValue(name.ToLower(CultureInfo.InvariantCulture), out var rt))
                 throw new Exception($"RT {name} not found");    
             return rt;
         }
-        public bool FindByName(string name, out RenderTarget target)
+        internal bool FindByName(string name, out RenderTarget target)
         {
             return _renderTargets.TryGetValue(name.ToLower(CultureInfo.InvariantCulture), out target!);
         }
@@ -144,7 +145,7 @@ namespace Phoenix.Framework.Rendering.RT
         /// Selects a render target as GL output 
         /// </summary>
         /// <param name="name">The name of the render target to bind</param>
-        public void RenderTo(RenderTarget target)
+        internal void RenderTo(RenderTarget target)
         {
             if(!target.IsBound)
                 throw new Exception($"target not bound (its handle is uint.MaxValue)");
@@ -155,16 +156,25 @@ namespace Phoenix.Framework.Rendering.RT
             GL.Viewport(0, 0, (uint)size.X, (uint)size.Y);
         }
         /// <summary>
+        /// Selects the screen rt as GL output 
+        /// </summary>
+        /// <param name="name">The name of the render target to bind</param>
+        internal void RenderToScreen()
+        {
+            RenderTo(_game._sceneRT);
+        }
+
+        /// <summary>
         /// Selects the screen as GL output 
         /// </summary>
         /// <param name="name">The name of the render target to bind</param>
-        public void RenderToScreen()
+        internal void TrueRenderToScreen()
         {
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
             GL.Viewport(0, 0, (uint)_game.WindowSize.X, (uint)_game.WindowSize.Y);
         }
 
-        public unsafe void HandleWindowResize()
+        internal void HandleWindowResize()
         {
             foreach(var rt in _dynamicTargets)
             {
@@ -174,10 +184,8 @@ namespace Phoenix.Framework.Rendering.RT
                 {
                     if(tex.FollowsWindowSize)
                     {
-                        var size = _game.WindowSize * tex.SizeMultiplier;
-
+                        var size = _game.Graphics.RenderViewport.Size * tex.SizeMultiplier;
                         tex.Texture.Resize(size);
-
                     }
 
                 }
@@ -187,8 +195,9 @@ namespace Phoenix.Framework.Rendering.RT
                 {
                     if(db.FollowsWindowSize)
                     {
-                        db.Size = _game.WindowSize;
-
+                        
+                        
+                        db.Size = _game.Graphics.RenderViewport.Size;
                         GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, db.Handle);
                         GL.RenderbufferStorage(
                             RenderbufferTarget.Renderbuffer, 

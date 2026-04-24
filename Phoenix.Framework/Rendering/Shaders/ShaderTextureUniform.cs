@@ -1,4 +1,5 @@
-﻿using Phoenix.Framework.Rendering.Textures;
+﻿using Phoenix.Framework.Rendering.GUI;
+using Phoenix.Framework.Rendering.Textures;
 using Silk.NET.OpenGL;
 using System;
 using System.Collections.Generic;
@@ -17,7 +18,10 @@ namespace Phoenix.Framework.Rendering.Shaders
             _slot = slot;
             _location = shader.GetUniformLocation(name);
             if (_location == -1 && throwIfNotFound)
-                throw new Exception($"Uniform [{name}] not found");
+            {
+                ErrorListWindow.Add($"Uniform [{name}] not found");
+                return;
+            }
         }
 
         public void Set(GLTexture tex)
