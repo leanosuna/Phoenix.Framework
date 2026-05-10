@@ -26,7 +26,7 @@ namespace Phoenix.Framework.Rendering.RT
         }
         internal RTTBuilder BuildRTT()
         {
-            return new RTTBuilder(GL);
+            return new RTTBuilder(_game);
         }
         private string GenName() 
         {
@@ -39,12 +39,12 @@ namespace Phoenix.Framework.Rendering.RT
         internal RenderTarget BuildDefault()
         {
             return BuildRT()
-                .AddTexture(new RenderTexture(GL))
+                .AddTexture(BuildDefaultRTT())
                 .SetDepthBuffer(new DepthBuffer())
                 .Build();
         }
 
-
+        internal RenderTexture BuildDefaultRTT() => new RenderTexture(_game);
         internal RenderTarget CreateRenderTarget(RenderTargetInfo info)
         {
             var name = info.Name;
@@ -186,6 +186,7 @@ namespace Phoenix.Framework.Rendering.RT
                     {
                         var size = _game.Graphics.RenderViewport.Size * tex.SizeMultiplier;
                         tex.Texture.Resize(size);
+                        tex.Size = size;
                     }
 
                 }
@@ -195,8 +196,6 @@ namespace Phoenix.Framework.Rendering.RT
                 {
                     if(db.FollowsWindowSize)
                     {
-                        
-                        
                         db.Size = _game.Graphics.RenderViewport.Size;
                         GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, db.Handle);
                         GL.RenderbufferStorage(

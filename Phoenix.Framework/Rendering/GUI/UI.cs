@@ -147,21 +147,32 @@ namespace Phoenix.Framework.Rendering.GUI
         public void DrawImg(string name, Vector2 position, Vector2 size, Vector2 uvMin, Vector2 uvMax)
         {
             uint texID = AssetLoader.LoadTexture(name).Handle;
-
-            var drawList = ImGui.GetForegroundDrawList();
-            drawList.AddImage((nint)texID, position, position + size, uvMin, uvMax);
+            DrawImg(texID, position, size, uvMin, uvMax);
         }
+        
+        public void DrawImg(GLTexture tex, Vector2 position, Vector2 size, Vector2 uvMin, Vector2 uvMax)
+        {
+            DrawImg(tex.Handle, position, size, uvMin, uvMax);
+        }
+
+        public void DrawImg(uint texId, Vector2 texSize, Vector2 srcPosition, Vector2 srcSize, Vector2 dstPosition, Vector2 dstSize)
+        {
+
+            var uvMin = srcPosition / texSize;
+            var uvMax = (srcPosition + srcSize) / texSize;
+
+            DrawImg(texId, dstPosition, dstPosition+dstSize, uvMin, uvMax);
+        }
+
+
+
         public void DrawImg(uint texId, Vector2 position, Vector2 size, Vector2 uvMin, Vector2 uvMax)
         {
             var drawList = ImGui.GetForegroundDrawList();
+            uvMin.Y = 1 - uvMin.Y;
+            uvMax.Y = 1 - uvMax.Y;
             drawList.AddImage((nint)texId, position, position + size, uvMin, uvMax);
         }
-        public void DrawImg(GLTexture tex, Vector2 position, Vector2 size, Vector2 uvMin, Vector2 uvMax)
-        {
-            var drawList = ImGui.GetForegroundDrawList();
-            drawList.AddImage((nint)tex.Handle, position, position + size, uvMin, uvMax);
-        }
-
         public void DrawSimpleButton(string name, Vector2 position, Vector2 size, Action action)
         {
             var guiName = $"btn_{_buttonId}";

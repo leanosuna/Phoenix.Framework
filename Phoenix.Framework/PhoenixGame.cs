@@ -225,11 +225,11 @@ namespace Phoenix.Framework
 
             if(!_renderingHalt)
             {
-                if (Gizmos.Enabled)
-                    Gizmos.Update();
 
                 Update(deltaTime);
                 UpdateCommonUBO(deltaTime);
+                if (Gizmos.Enabled)
+                    Gizmos.Update();
             }
             
         }

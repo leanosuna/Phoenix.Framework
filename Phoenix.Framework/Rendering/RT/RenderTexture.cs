@@ -14,11 +14,13 @@ namespace Phoenix.Framework.Rendering.RT
             get;
             internal set;
         }
-        
+
+        public float Width => Size.X;
+        public float Height => Size.Y;
+
         internal GLTexture Texture = default!;
         
-
-        public RenderTexture(GLTexture tex, RenderTextureInfo ti)
+        internal RenderTexture(GLTexture tex, RenderTextureInfo ti)
         {
             Texture = tex;
             FollowsWindowSize = ti.FollowsWindowSize;
@@ -26,15 +28,15 @@ namespace Phoenix.Framework.Rendering.RT
             Size = ti.Size;
         }
         
-        public RenderTexture(GL gl)
+        internal RenderTexture(PhoenixGame game)
         {
             var ti = new RenderTextureInfo();
-            var tex = new GLTexture(gl, ti);
+            var tex = new GLTexture(game.GL, ti);
 
             Texture = tex;
             FollowsWindowSize = ti.FollowsWindowSize;
             SizeMultiplier = ti.SizeMultiplier;
-            Size = ti.Size;
+            Size = game.WindowSize;
         }
 
         public static implicit operator uint(RenderTexture target)

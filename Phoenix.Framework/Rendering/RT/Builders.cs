@@ -2,6 +2,7 @@
 using Phoenix.Framework.Rendering.Textures;
 using Silk.NET.OpenGL;
 using System.Numerics;
+using System.Xml.Linq;
 
 namespace Phoenix.Framework.Rendering.RT
 {
@@ -9,9 +10,11 @@ namespace Phoenix.Framework.Rendering.RT
     {
         private RenderTextureInfo _ti = new();
         private GL GL;
-        public RTTBuilder(GL gl)
+        private PhoenixGame _game;
+        public RTTBuilder(PhoenixGame game)
         {
-            GL = gl;
+            _game = game;
+            GL = game.GL;
         }
         public RTTBuilder SetFormat(InternalFormat format)
         {
@@ -51,6 +54,9 @@ namespace Phoenix.Framework.Rendering.RT
         }
         public RenderTexture Build()
         {
+            if (_ti.FollowsWindowSize)
+                _ti.Size = _game.WindowSize;
+
             var tex = new GLTexture(GL, _ti);
             var rt = new RenderTexture(tex, _ti);
             return rt;
@@ -84,9 +90,23 @@ namespace Phoenix.Framework.Rendering.RT
             return this;
         }
 
+        
+
+        public RTBuilder AddTexture()
+        {
+            _ti.Textures.Add(_rtm.BuildDefaultRTT());
+            return this;
+        }
+
         public RTBuilder SetDepthBuffer(DepthBuffer db)
         {
             _ti.DepthBuffer = db;
+            return this;
+        }
+
+        public RTBuilder AddDepthBuffer()
+        {
+            _ti.DepthBuffer = new DepthBuffer();
             return this;
         }
 

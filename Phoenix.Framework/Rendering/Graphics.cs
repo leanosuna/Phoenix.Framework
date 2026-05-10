@@ -163,7 +163,8 @@ namespace Phoenix.Framework.Rendering
 
         public RTBuilder BuildRenderTarget() => _rtManager.BuildRT();
         public RTTBuilder BuildTargetTexture() => _rtManager.BuildRTT();
-        public RenderTarget NewDefaultRenderTarget() => _rtManager.BuildDefault();
+        public RenderTarget NewRenderTarget() => _rtManager.BuildDefault();
+        
         public bool TryFindByName(string name, out RenderTarget target) => _rtManager.FindByName(name, out target);
 
 
@@ -171,7 +172,7 @@ namespace Phoenix.Framework.Rendering
         /// Copies the color buffer of a render target to the screen.
         /// </summary>
 
-        internal void CopyToScreen(
+        public void CopyToScreen(
             RenderTarget rt, int srcRTindex, Vector4 srcRect, 
             Vector4 destRect, BlitFramebufferFilter filter = BlitFramebufferFilter.Nearest)
         {

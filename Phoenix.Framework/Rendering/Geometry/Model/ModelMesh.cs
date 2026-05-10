@@ -16,7 +16,7 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
         private uint _indicesLength;
         GL GL;
         private MeshAttributes _attributes;
-        public unsafe ModelMesh(GL gl, string name, Vertex[] vertices, uint[] indices, Matrix4x4 transform, bool isAnimated)
+        public unsafe ModelMesh(GL gl, string name, Vertex[] vertices, uint[] indices, Matrix4x4 transform, bool isAnimated, bool tangents)
         {
             GL = gl;
             Name = name;
@@ -26,18 +26,18 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
 
             _VAHandle = GL.GenVertexArray();
             GL.BindVertexArray(_VAHandle);
-            _attributes =   
-                isAnimated?
-                MeshAttributes.Position3D |
-                MeshAttributes.TexCoord |
-                MeshAttributes.Normals | 
-                MeshAttributes.boneIds |
-                MeshAttributes.boneWeights
-                :
+
+            _attributes =
                 MeshAttributes.Position3D |
                 MeshAttributes.TexCoord |
                 MeshAttributes.Normals;
 
+            if (isAnimated)
+                _attributes |= MeshAttributes.boneIds | MeshAttributes.boneWeights;
+
+            if(tangents)
+                _attributes |= MeshAttributes.Tangents | MeshAttributes.Bitangents;
+            
             _VBhandle = GL.GenBuffer();
             GL.BindBuffer(BufferTargetARB.ArrayBuffer, _VBhandle);
 

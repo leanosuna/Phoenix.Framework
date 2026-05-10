@@ -16,7 +16,8 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
             var assetType = br.ReadString();
             var ver = br.ReadUInt32();
             var isAnimated = br.ReadBoolean();
-            
+            var tangents = br.ReadBoolean();
+
             var partsCount = br.ReadInt32();
             
             List<ModelPart> parts = new List<ModelPart>();
@@ -39,7 +40,7 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
 
                     var tv = vertices[0];
                     
-                    meshes.Add(new ModelMesh(gl, meshName, vertices, indices, transform, isAnimated));
+                    meshes.Add(new ModelMesh(gl, meshName, vertices, indices, transform, isAnimated, tangents));
                 }
 
                 parts.Add(new ModelPart(partName, meshes));
