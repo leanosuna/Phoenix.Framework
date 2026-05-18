@@ -44,6 +44,7 @@ namespace Phoenix.Framework.Rendering.Textures
             Handle = GL.GenTexture();
             Bind();
             LoadIntoGL();
+            Bind();
             LoadParametersIntoGL();
         }
 

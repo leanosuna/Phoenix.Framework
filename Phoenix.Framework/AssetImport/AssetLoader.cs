@@ -100,11 +100,15 @@ namespace Phoenix.Framework.AssetImport
         private static (string absVert, string absFrag) ShaderAbsolutePath(string name)
         {
             var fileName = Path.GetFileNameWithoutExtension(name);
-
+            var dir = Path.GetDirectoryName(name);
             var assets = _assetManifest.Assets
+                .FindAll(a => 
+                    dir!
+                    .Equals(Path.GetDirectoryName(a.RelativePath), StringComparison.OrdinalIgnoreCase))
                 .FindAll(a =>
                     Path.GetFileNameWithoutExtension(a.RelativePath)
-                    .Equals(fileName, StringComparison.OrdinalIgnoreCase)).ToList();
+                    .Equals(fileName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
 
             if (assets.Count != 2)
                 throw new Exception($"Expected 2 files for {name}, found {assets.Count}");
