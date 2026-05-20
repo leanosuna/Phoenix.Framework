@@ -5,7 +5,7 @@ using System.Runtime.Intrinsics.X86;
 
 namespace Phoenix.Framework.Rendering.Textures
 {
-    public class GLTexture
+    public class GLTexture : IDisposable
     {
         const int GL_RGBA8 = 0x8058;
         const int GL_COMPRESSED_RGBA_S3TC_DXT1_EXT = 0x83F1; // BC1
@@ -153,6 +153,14 @@ namespace Phoenix.Framework.Rendering.Textures
 
             GL.TexParameter(TextureTarget.Texture2D, GLEnum.TextureBaseLevel, 0);
             GL.TexParameter(TextureTarget.Texture2D, GLEnum.TextureMaxLevel, MipCount - 1);
+        }
+
+        private bool _disposed;
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            GL.DeleteTexture(Handle);
         }
     }
 }

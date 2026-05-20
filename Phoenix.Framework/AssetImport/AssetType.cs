@@ -9,6 +9,7 @@ namespace Phoenix.Framework.AssetImport
         Model,
         Texture,
         Shader,
+        Video,
         Unknown
     }
 }

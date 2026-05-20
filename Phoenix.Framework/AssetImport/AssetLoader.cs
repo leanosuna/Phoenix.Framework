@@ -1,6 +1,7 @@
 ﻿using Phoenix.Framework.Rendering.Geometry.Model;
 using Phoenix.Framework.Rendering.Shaders;
 using Phoenix.Framework.Rendering.Textures;
+using Phoenix.Framework.Video;
 using Silk.NET.OpenGL;
 
 namespace Phoenix.Framework.AssetImport
@@ -14,6 +15,7 @@ namespace Phoenix.Framework.AssetImport
         private static readonly Dictionary<string, Model> _loadedModels = new();
         private static readonly Dictionary<string, GLTexture> _loadedTextures = new();
         private static readonly Dictionary<string, GLShader> _loadedShaders = new();
+        private static readonly Dictionary<string, VideoData> _loadedVideos = new();
         private static AssetManifest _assetManifest = default!;
         private static GL GL = default!;
         public static void Init(PhoenixGame game, string contentPath = ContentDefaultPath, string manifestPath = ManifestDefaultPath)
@@ -48,6 +50,17 @@ namespace Phoenix.Framework.AssetImport
         {
             var path = ShaderAbsolutePath(name);
             return LoadShaderAbs(path.absVert, path.absFrag);
+        }
+        public static VideoData LoadVideo(string name)
+        {
+            var absolutePath = AssetAbsolutePath(name);
+            if (!_loadedVideos.TryGetValue(absolutePath, out var video))
+            {
+                video = BinaryVideoReader.Load(absolutePath);
+                _loadedVideos[absolutePath] = video;
+            }
+
+            return video;
         }
 
         private static GLTexture LoadTextureAbs(string absolutePath)

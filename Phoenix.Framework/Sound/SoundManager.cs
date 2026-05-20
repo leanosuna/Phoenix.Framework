@@ -88,6 +88,13 @@ namespace Phoenix.Framework.Sound
 
             var data = decoder.Decode(path);
 
+            return LoadSoundClip(data);
+        }
+
+        public static SoundClip LoadSoundClip(SoundData data)
+        {
+            EnsureInitialized();
+
             uint buffer = _al!.GenBuffer();
 
             unsafe
@@ -100,6 +107,8 @@ namespace Phoenix.Framework.Sound
 
             return new SoundClip(buffer);
         }
+
+        public static AL? GetAL() => _al;
 
         public static SoundInstance Play2D(SoundClip clip, float volume = 1f, float pitch = 1f, bool loop = false)
         {
