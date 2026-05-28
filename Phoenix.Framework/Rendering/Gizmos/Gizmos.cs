@@ -56,7 +56,8 @@ namespace Phoenix.Framework.Rendering.Gizmos
         {
             if (!Enabled)
                 return;
-
+            if (game.Camera is null)
+                return;
             if (game.Camera.View == Matrix4x4.Identity || game.Camera.Projection == Matrix4x4.Identity)
                 return;
 

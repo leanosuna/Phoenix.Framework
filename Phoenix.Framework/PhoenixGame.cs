@@ -236,6 +236,8 @@ namespace Phoenix.Framework
 
         private unsafe void UpdateCommonUBO(double dt)
         {
+            if (Camera is null)
+                return;
             _commonUboData = new CommonUBO(Camera.View, Camera.Projection, (float)Graphics.Time, (float)dt);
             GL.BindBuffer(GLEnum.UniformBuffer, CommonUboHandle);
             fixed (void* d = & _commonUboData)
