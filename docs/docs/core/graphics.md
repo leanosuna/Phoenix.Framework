@@ -60,14 +60,17 @@ var rt = Graphics.BuildRenderTarget()
     .AddDepthBuffer()
     .Build();
 
+// Abstraction that internally does the above.
+var rt = Graphics.NewRenderTarget();
+
 // Custom render target with named texture and specific settings
 var rt = Graphics.BuildRenderTarget()
     .SetName("post-process-rt")
     .AddTexture(RTManager.BuildRTT()
-        .SetFormat(Silk.NET.OpenGL.GLEnum.Rgba8)
-        .SetWrapS(Silk.NET.OpenGL.GLEnum.ClampToEdge)
-        .SetMinFilter(Silk.NET.OpenGL.GLEnum.Linear)
-        .SetStatic(new Silk.NET.Maths.Vector2(1024, 1024)))
+        .SetFormat(GLEnum.Rgba8)
+        .SetWrapS(GLEnum.ClampToEdge)
+        .SetMinFilter(GLEnum.Linear)
+        .SetStatic(new Vector2(1024, 1024)))
     .SetDepthBuffer(new DepthBuffer())
     .Build();
 
@@ -75,7 +78,7 @@ var rt = Graphics.BuildRenderTarget()
 var rt = Graphics.BuildRenderTarget()
     .SetName("half-res-rt")
     .AddTexture(RTManager.BuildRTT()
-        .SetResolutionMultiplier(new Silk.NET.Maths.Vector2(0.5f, 0.5f)))
+        .SetResolutionMultiplier(new Vector2(0.5f, 0.5f)))
     .AddDepthBuffer()
     .Build();
 ```
@@ -84,8 +87,8 @@ var rt = Graphics.BuildRenderTarget()
 
 ```csharp
 new DepthBuffer()                              // Window-sized, Depth24Stencil8
-new DepthBuffer(Silk.NET.OpenGL.GLEnum.Depth24Stencil8)
-new DepthBuffer(new Silk.NET.Maths.Vector2(1024, 1024))  // Fixed size
+new DepthBuffer(GLEnum.Depth24Stencil8)
+new DepthBuffer(new Vector2(1024, 1024))  // Fixed size
 ```
 
 ### Using Render Targets
@@ -98,18 +101,8 @@ Graphics.SetRenderToTarget(rt);
 // Return to screen
 Graphics.SetRenderToScreen();
 ```
+- Remember the scene is always rendered to an internal `_sceneRT` each frame. `SetRenderToScreen()` selects this rt as the target.
 
-### Rendering to Screen
-
-The scene is always rendered to an internal `_sceneRT` each frame. `TrueRenderToScreen()` blits it to the window framebuffer:
-
-```csharp
-// Blit a specific render target to screen
-Graphics.CopyToScreen(rt, srcRTIndex: 0,
-    new Vector4(0, 0, 1, 1),   // source rect
-    new Vector4(0, 0, 1, 1),   // destination rect
-    Silk.NET.OpenGL.GLEnum.Nearest);
-```
 
 ### Finding Render Targets
 
@@ -127,14 +120,12 @@ var target = Graphics.FindByName("post-process-rt");  // throws if not found
 A single quad from -1 to 1 with UV coordinates 0→1. Used for post-processing:
 
 ```csharp
-// Set your post-processing shader as current
-shader.SetAsCurrentGLProgram();
 Graphics.FullScreenQuad.Draw();  // Draws the quad
 ```
 
 ## CommonUBO
 
-A single Uniform Buffer Object (binding point 0) updated every frame with camera and timing data:
+A single Uniform Buffer Object (at binding point 0) internally updated every frame with camera and timing data:
 
 ```csharp
 // GLSL side
@@ -148,7 +139,7 @@ layout(std140) uniform CommonData {
 
 ```csharp
 // C# side — the UBO is created and updated automatically by PhoenixGame.
-// Bind it in your shader:
+// Bind it in your shader (auto gen shader helpers have this already.)
 shader.AttachUBO(Game.CommonUboHandle, "CommonData", binding: 0);
 ```
 

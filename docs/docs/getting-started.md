@@ -4,10 +4,10 @@ This guide walks you through setting up a Phoenix project from scratch.
 
 ## Prerequisites
 
-- **.NET 8.0 SDK** or later
+- **.NET 10 SDK** or later
 - A system with an OpenGL-compatible GPU and drivers
 
-## Create a New Project
+## Create a New Project (TODO: no extra package required)
 
 ```bash
 dotnet new console -n MyPhoenixGame
@@ -21,56 +21,102 @@ dotnet add package OpenTK.Audio.OpenAL   # or use the bundled OpenAL bindings
 dotnet add package SixLabors.ImageSharp
 ```
 
-Add a reference to the Phoenix.Framework project or NuGet package:
+Add a reference to the Phoenix.Framework project or NuGet package:  (TODO: it should just be the nuget package)
 
 ```bash
 dotnet add reference ..\Phoenix.Framework\Phoenix.Framework\Phoenix.Framework.csproj
 ```
+## Understanding the PhoenixGame lifecycle
+
+Most systems are internally handled, the game class provides the following methods:
+
+### Required
+- ```Initialize()```: Internal systems ready. Load your assets and configurations here.
+- ```Update(double deltaTime)```: Fires each frame. Game logic goes here.
+- ```Render(double deltaTime)```: Fires each frame. Rendering goes here.
+### Optional
+- ```InitialLoadScreen()```: Fires the first frame, allows you to customize the "Loading game assets" screen before Initialize() 
+- ```OnWindowResize(Vector2 size)```: Fires when resizing the game window, allows you to handle affected objects.
+- ```OnClose()```: Fires when closing the game, allows you to handle custom object disposal.
+
 
 ## Set Up the Game Class
 
-Create `MyGame.cs`:
+Create `Game.cs`:
 
 ```csharp
 using Phoenix.Framework;
-using Silk.NET.Input;
-using Silk.NET.Maths;
-using Silk.NET.Windowing;
+using Phoenix.Framework.Cameras;
+using Phoenix.Framework.Rendering;
+using System.Numerics;
 
-public class MyGame : PhoenixGame
+public class Game : PhoenixGame
 {
+    Matrix4x4 _cubeWorld = Matrix4x4.Identity;
+
+    protected override void InitialLoadScreen()
+    {
+        UI.DrawText("Custom startup screen", 
+            position: Vector2.Zero, 
+            color: Vector4.One, 
+            size: 30);
+    }
     protected override void Initialize()
     {
-        // Create a free-look camera
-        Camera = new FreeCamera(
-            this,
-            new Vector3(0, 5, -10),
-            0, -MathF.PI / 4, MathF.PI / 4,
-            0.1f, 1000f,
-            WindowWidth / (float)WindowHeight
+        // Asset loading ...
+        var cam =  new FreeCamera(
+            game: this,
+            position: new Vector3(0, 0, -10),
+            yaw: MathHelper.PiOver2,
+            pitch: 0f,
+            fov: MathHelper.PiOver2,
+            nearPlane: 1f, 
+            farPlane: 1000f,
+            aspectRatio: WindowWidth / (float)WindowHeight
         );
-        Camera.SetMoveKeys(Key.W, Key.S, Key.A, Key.D, Key.E, Key.Q, Key.LeftShift, 15f);
+        cam.MouseAim = true;
 
-        // Enable depth testing and backface culling
-        Graphics.SetDepthTest(true);
-        Graphics.SetFaceCulling(true);
-        Graphics.SetClearColor(new Vector4(0.1f, 0.15f, 0.2f, 1f));
+        Camera = cam;
+
+        Gizmos.Enabled = true;
+
+    }
+                
+    protected override void Update(double deltaTime)
+    {
+        // Game logic ...
+        var t = (float)Graphics.Time;
+        ((FreeCamera)Camera).Update(deltaTime);
+        _cubeWorld = Matrix4x4.CreateScale(5f)
+            * MathHelper.RotationMxFromYawPitchRoll(t, MathF.Sin(t), MathF.Cos(t));
     }
 
-    protected override void Update(double dt)
+    protected override void Render(double deltaTime)
     {
-        Camera.Update((float)dt);
-    }
+        // Render logic ...
+        Graphics.SetClearColor(new Vector4(0, 0, 0, 1));
+        Graphics.ClearRenderTarget();
 
-    protected override void Render(double dt)
-    {
-        // Draw your scene here
-        // Shaders receive View/Projection via CommonUBO at binding point 0
+        Gizmos.AddCube(_cubeWorld, Vector3.One);
     }
 
     protected override void RenderUI()
     {
-        // ImGui overlay rendered on top of the scene
+        // UI pass...
+        UI.DrawCenteredText("This text is always pixel perfect!", 
+            position: new Vector2(WindowWidth/2, 10),
+            color: Vector4.One,
+            size: 20);
+    }
+
+    protected override void OnWindowResize(Vector2 windowSize)
+    {
+        // Something needs resizing...
+    }
+
+    protected override void OnClose()
+    {
+        // Something needs disposing...
     }
 }
 ```
@@ -82,7 +128,7 @@ public static class Program
 {
     public static void Main()
     {
-        using var game = new MyGame();
+        using var game = new Game();
         game.Run();
     }
 }
@@ -94,7 +140,10 @@ public static class Program
 dotnet run
 ```
 
-A window opens with a black background. The camera is positioned at `(0, 5, -10)` looking toward the origin. Press **F11** to toggle render halt (pause rendering while keeping the game loop running).
+A window opens with a black background, the camera is positioned at `(0, 0, -10)` looking toward the origin. 
+A wireframe cube from Gizmos is rendered spinning around in the center of the screen.
+
+TODO: get this out of here Press **F11** to toggle render halt (pause rendering while keeping the game loop running).
 
 ## Next Steps
 

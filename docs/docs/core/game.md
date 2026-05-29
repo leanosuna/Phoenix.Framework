@@ -2,45 +2,12 @@
 
 `PhoenixGame` is the abstract base class for all Phoenix applications. It manages the window, input, rendering pipeline, and coordinates all subsystems.
 
-## Creating a Game
+## Understanding the internal pipeline
 
-Inherit from `PhoenixGame` and implement the three required methods:
+The windowing manager from Silk.NET fires internally InternalLoad(), InternalUpdate(), and InternalRender().  
+These will handle setting up and updating all internal systems every frame in the background as shown below.
 
-```csharp
-public class MyGame : PhoenixGame
-{
-    protected override void Initialize()
-    {
-        // Called once after GL context is ready, before the first frame
-    }
-
-    protected override void Update(double deltaTime)
-    {
-        // Called every frame — game logic, input, camera movement, etc.
-    }
-
-    protected override void Render(double deltaTime)
-    {
-        // Called every frame — draw your scene
-    }
-}
-```
-
-## Entry Point
-
-```csharp
-public static class Program
-{
-    public static void Main()
-    {
-        using var game = new MyGame();
-        game.Run();  // Blocking call — runs until Window.Close()
-    }
-}
-```
-
-## Lifecycle
-
+## Internal systems
 ```
 Run()
  └── Window.Create()
@@ -77,6 +44,18 @@ Run()
                └── RenderUI(dt)          ← user overlay code
 ```
 
+## The internal scene target and RenderViewport
+The pipeline is designed to have the game render to an internal scene render target.
+This allows the UI layer of the game to render using the game window resolution, keeping the UI clean and pixel perfect, independent of the rendering framebuffer size which can be set to a different (lower) resolution at Graphics.RenderViewport.
+
+## Rendering halt
+This internal control allows the game to be halted at any time using the configured key (F11 by default) which stops excecuting the update and render methods but keeps the UI alive and responsive. Useful for debugging purposes.
+
+
+## Important Notes
+- The `CommonUBO` is updated every frame with `[View, Projection, Time, DeltaTime]` and bound at binding point 0.
+
+
 ## Properties
 
 ### Game Access
@@ -101,54 +80,4 @@ Run()
 | `Graphics` | `Graphics` | Read-only after load. |
 | `CommonUboHandle` | `uint` | UBO handle bound at binding point 0. |
 
-## Optional Overrides
 
-### `RenderUI()`
-
-Called after the main scene is rendered and the screen is cleared, but before ImGui. Use this for custom ImGui rendering.
-
-```csharp
-protected override void RenderUI()
-{
-    ImGui.Begin("Debug Info");
-    ImGui.Text($"FPS: {Graphics.FPS_SAMPLE:F0}");
-    ImGui.Text($"Frame time: {Graphics.FT_SAMPLE:F3}ms");
-    ImGui.End();
-}
-```
-
-### `OnWindowResize()`
-
-Called when the window is resized.
-
-```csharp
-protected override void OnWindowResize(Vector2D<int> windowSize)
-{
-    base.OnWindowResize(windowSize);
-    Camera.AspectRatio = WindowWidth / (float)WindowHeight;
-}
-```
-
-### `OnClose()`
-
-Called when the user closes the window.
-
-```csharp
-protected override void OnClose()
-{
-    // Cleanup resources
-    base.OnClose();
-}
-```
-
-### `InitialLoadScreen()`
-
-Called during the very first frame, before `Initialize()` completes. Use this to show a loading screen.
-
-## Important Notes
-
-- `InputManager`, `FullScreenQuad`, `Gizmos`, and `UI` are **read-only**. Do not assign them — they are created automatically.
-- `Camera` must be assigned in `Initialize()` or later. Before that, it is `default!`.
-- The `CommonUBO` is updated every frame with `[View, Projection, Time, DeltaTime]` and bound at binding point 0.
-- Press **F11** to toggle render halt (useful for debugging game logic without rendering).
-- `Initialize()` is called once on the first frame after `DelayedLoad()` completes.

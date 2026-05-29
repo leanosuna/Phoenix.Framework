@@ -4,56 +4,11 @@ A lightweight 3D game framework built on **Silk.NET** and **OpenGL** for C#.
 
 ## What is Phoenix?
 
-Phoenix provides the foundational systems needed to build a 3D game: a game loop, rendering pipeline, camera, input, audio, collision detection, and an asset pipeline with binary model/texture loading. It targets .NET 8+ and runs on Windows, macOS, and Linux.
+Phoenix provides the foundational systems needed to build a 3D game:
 
-## Quick Start
+The main game loop, cameras, input, audio, collision detection, and an asset pipeline with binary model/texture loading.
 
-```csharp
-using Phoenix.Framework;
-using Silk.NET.Input;
-using Silk.NET.Maths;
-
-public class MyGame : PhoenixGame
-{
-    protected override void Initialize()
-    {
-        Camera = new FreeCamera(
-            this,
-            Vector3.Zero,
-            0, -MathF.PI / 4, MathF.PI / 4,
-            0.1f, 1000f,
-            WindowWidth / (float)WindowHeight
-        );
-        Camera.SetMoveKeys(Key.W, Key.S, Key.A, Key.D, Key.E, Key.Q, Key.LeftShift, 15f);
-        Graphics.SetDepthTest(true);
-        Graphics.SetFaceCulling(true);
-    }
-
-    protected override void Update(double dt)
-    {
-        Camera.Update((float)dt);
-    }
-
-    protected override void Render(double dt)
-    {
-        // Your rendering code
-    }
-
-    protected override void RenderUI()
-    {
-        // ImGui overlay
-    }
-}
-
-public static class Program
-{
-    public static void Main()
-    {
-        using var game = new MyGame();
-        game.Run();
-    }
-}
-```
+It targets .NET 10 and runs on Windows, macOS, and Linux.
 
 ## Core Features
 
@@ -86,12 +41,7 @@ PhoenixGame
  └── AssetLoader ───► Cached models, textures, shaders
 ```
 
-All systems are wired into the `PhoenixGame` lifecycle:
-
-1. **Load** — GL context ready. `InputManager`, `UI`, `RTManager`, `Graphics` created.
-2. **Update** — `DelayedLoad` fires once (creates `FullScreenQuad`, `Gizmos`, `SoundManager`), then calls `Initialize()`. Each frame: `Graphics.Time` advances, `InputManager.Update()`, user `Update(dt)`.
-3. **Render** — Renders to `_sceneRT`, then blits to screen. UI renders on top.
-
+Renders to `_sceneRT`, then blits to screen. UI renders on top
 ## See Also
 
 - [Getting Started](getting-started.md) — project setup and first game
