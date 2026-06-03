@@ -121,7 +121,10 @@ public class Game : PhoenixGame
             size: 20);
     }
 
-
+    protected override void OnWindowResize(Vector2 size)
+    {
+        // Something needs resizing...
+    }
 
     protected override void OnClose()
     {
