@@ -9,18 +9,28 @@ This guide walks you through setting up a Phoenix project from scratch.
 
 ## Create a New Project 
 
+### First, your solution and project structure
 ```bash
-dotnet new console -n MyPhoenixGame
+mkdir MyPhoenixGame
 cd MyPhoenixGame
-dotnet add package Phoenix.Framework
-dotnet tool install Phoenix.AssetTool
+dotnet new sln -n MyPhoenixGame
+dotnet new console -n MyPhoenixGame -o MyPhoenixGame
 
+dotnet sln MyPhoenixGame.slnx add MyPhoenixGame/MyPhoenixGame.csproj
+```
+### Now, install the framework and the asset tool.
+```bash
+cd MyPhoenixGame
+dotnet add package Phoenix.Framework 
+dotnet tool install Phoenix.AssetTool
+mkdir Content
 ```
 
 ## Using the Phoenix Asset Tool, (pat) initialize an asset manifest
 ```bash
 dotnet pat Content/asset-manifest.json init
 ```
+
 Make sure the manifest file and the content files are included on build
 ```xml
 <ItemGroup>
@@ -111,10 +121,7 @@ public class Game : PhoenixGame
             size: 20);
     }
 
-    protected override void OnWindowResize(Vector2 windowSize)
-    {
-        // Something needs resizing...
-    }
+
 
     protected override void OnClose()
     {
@@ -130,7 +137,7 @@ public static class Program
 {
     public static void Main()
     {
-        using var game = new Game();
+        var game = new Game();
         game.Run();
     }
 }
