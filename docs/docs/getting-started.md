@@ -7,24 +7,26 @@ This guide walks you through setting up a Phoenix project from scratch.
 - **.NET 10 SDK** or later
 - A system with an OpenGL-compatible GPU and drivers
 
-## Create a New Project (TODO: no extra package required)
+## Create a New Project 
 
 ```bash
 dotnet new console -n MyPhoenixGame
 cd MyPhoenixGame
-dotnet add package Silk.NET
-dotnet add package Silk.NET.Input
-dotnet add package Silk.NET.OpenGL
-dotnet add package Silk.NET.OpenGL.Extensions.ImGui
-dotnet add package Assimp.Unofficial
-dotnet add package OpenTK.Audio.OpenAL   # or use the bundled OpenAL bindings
-dotnet add package SixLabors.ImageSharp
+dotnet add package Phoenix.Framework
+dotnet tool install Phoenix.AssetTool
+
 ```
 
-Add a reference to the Phoenix.Framework project or NuGet package:  (TODO: it should just be the nuget package)
-
+## Using the Phoenix Asset Tool, (pat) initialize an asset manifest
 ```bash
-dotnet add reference ..\Phoenix.Framework\Phoenix.Framework\Phoenix.Framework.csproj
+dotnet pat Content/asset-manifest.json init
+```
+Make sure the manifest file and the content files are included on build
+```xml
+<ItemGroup>
+    <None Include="Content\ContentBin\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Content\asset-manifest.json" CopyToOutputDirectory="PreserveNewest" />
+</ItemGroup>
 ```
 ## Understanding the PhoenixGame lifecycle
 
