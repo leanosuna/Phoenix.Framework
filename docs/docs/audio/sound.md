@@ -4,7 +4,7 @@ Phoenix provides audio playback via OpenAL with a pluggable decoder system.
 
 ## SoundManager (Static API)
 
-All audio operations use the static `SoundManager` class. It is initialized automatically by `PhoenixGame` during `DelayedLoad()`.
+All audio operations use the static `SoundManager` class. It is initialized automatically by `PhoenixGame` during startup.
 
 ### Loading Sounds
 
@@ -81,15 +81,6 @@ SoundManager.SetListenerOrientation(Camera.Front, Camera.Up);
 
 `SoundManager.Update()` is called automatically by `PhoenixGame` each frame. It disposes finished instances and cleans up the active list.
 
-### Shutdown
-
-```csharp
-protected override void OnClose()
-{
-    SoundManager.Shutdown();  // Clean up OpenAL resources
-    base.OnClose();
-}
-```
 
 ## Custom Decoders
 

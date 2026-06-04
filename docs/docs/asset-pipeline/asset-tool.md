@@ -2,41 +2,43 @@
 
 `Phoenix.AssetTool` is a companion tool for compiling source assets (FBX models, PNG textures, GLSL shaders) into Phoenix's binary format.
 
-## Projects
-
-| Project | Type | Purpose |
-|---------|------|---------|
-| `Phoenix.AssetTool.Core` | Library | Asset compilation logic |
-| `Phoenix.AssetTool.Gui` | GUI app | Drag-and-drop asset browser |
-| `Phoenix.AssetTool.Cli` | CLI tool | Command-line builds |
-
 ## Building Assets
 
-### CLI
+### CLI Commands
 
 ```bash
-# Build all assets in a directory
-dotnet run --project Phoenix.AssetTool.Cli -- build --source ./Content --output ./ContentBin
+# Initialize an empty manifest, -force to replace
+dotnet pat Content/asset-manifest.json init
 
-# Build specific files
-dotnet run --project Phoenix.AssetTool.Cli -- build --files ./Content/characters/robot.fbx
+# Start the AssetTool GUI
+dotnet pat Content/asset-manifest.json gui
 
-# Auto mode (watch for changes)
-dotnet run --project Phoenix.AssetTool.Cli -- auto --source ./Content --output ./ContentBin
+# List all of the files in the manifest
+dotnet pat Content/asset-manifest.json list
+
+# Build all of the files in the manifest
+dotnet pat Content/asset-manifest.json build
+
+# Automatically track files in the manifest and rebuild changes
+dotnet pat Content/asset-manifest.json auto
 ```
 
 ### GUI
 
-Launch the GUI application:
+The GUI provides:  
+- **File Selector** — Opens native file explorer window to select assets  
+- **Asset Browser** — Browse and preview assets  
+- **Build Panel** — Build selected assets, see real-time progress  
+- **Options (right panel)** — Configure model export settings, texture compression  
+- **Build Error (right panel)** — Hovering on a item that failed build shows a pop-up 
+with the error log, click it to open on the right panel
 
-```bash
-dotnet run --project Phoenix.AssetTool.Gui
-```
-
-The GUI provides:
-- **Asset Browser** — browse and preview assets
-- **Build Panel** — select source/output directories, build selected assets
-- **Options** — configure model export settings, texture compression
+### GUI Notes:
+- You can select on the top left if you desire light or dark theme.  
+- You can resize the font by clicking the buttons in the top left, or by Ctrl+MouseWheel Up/Down.  
+- You can add/remove items from build directly from the asset browser.
+- You can resize the left and right panels.
+- In the options for an asset you can run a build process for that item only.
 
 ## Supported Formats
 
@@ -56,30 +58,10 @@ The GUI provides:
 
 | Input | Output |
 |-------|--------|
-| `.vert`, `.frag` | `.vert`, `.frag` (copied as-is) |
+| `.glsl`, `.vert`, `.frag` | `.glsl`, `.vert`, `.frag` (copied as-is) |
 
-No compilation or optimization is performed on shaders — they are passed through unchanged.
-
-## Asset Pipeline
-
-The build pipeline processes assets in this order:
-
-```
-1. Model assets → BinaryModelWriter
-     ├── Extract mesh data (vertices, indices, transforms)
-     ├── Extract bone animation data (keyframes, transforms)
-     └── Write .bin file
-
-2. Texture assets → TextureBinaryWriter
-     ├── Load image (ImageSharp)
-     ├── Compress to BC1/BC3/BC5
-     └── Write .bin file (with mipmaps)
-
-3. Shader assets → GLCompiler
-     ├── Compile vertex shader
-     ├── Compile fragment shader
-     └── Link program (validation only, output is source text)
-```
+Shaders are not converted into bin files, they are passed through unchanged.  
+They are, however compiled an verified for errors at build time.
 
 ## Build Options
 
@@ -87,101 +69,21 @@ The build pipeline processes assets in this order:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `ExtractAnimations` | `true` | Extract bone animation clips |
-| `GenerateTangents` | `true` | Generate tangent/bitangent vectors |
-| `FlipUVs` | `false` | Flip V texture coordinate |
+| `IsAnimated` | `false` | Is an animated model, extract animations |
+| `Extract Textures` | `true` | Contains embedded textures, extract them |
+| `Assimp Flags` | `per option default` | Postprocessing Flags for assimp |
 
 ### Texture Load Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
+| `Generate MipMaps` | `true` | Generate mipmaps for this texture |
 | `Compression` | `BC3` | Target compression format |
-| `MipMaps` | `true` | Generate mipmaps |
-| `ResizeToPowerOfTwo` | `false` | Resize texture to next power of two |
+| `Wrap Horizontal` | `repeat` | WrapS |
+| `Wrap Vertical` | `repeat` | WrapT |
+| `Min filter` | `Linear Mipmap Linear` | Interpolation filter min|
+| `Mag filter` | `Linear` | Interpolation filter mag|
 
-## Internal Architecture
-
-### BuildStatus
-
-```csharp
-public class BuildStatus
-{
-    public string Name { get; }
-    public string RelativePath { get; }
-    public AssetType Type { get; }
-    public AssetBuildState State { get; set; }  // Queued, Building, Completed, Failed
-    public string Error { get; set; }
-}
-```
-
-### AssetBuildController
-
-Manages the build queue:
-
-```csharp
-// Add assets to build queue
-AssetBuildController.AddToQueue(buildStatuses);
-
-// Start building
-await AssetBuildController.RunBuildAsync(rebuild: false, onFinish: () => { /* done */ });
-
-// Cancel a running build
-AssetBuildController.Cancel();
-
-// Check status
-var status = AssetBuildController.Status;
-```
-
-### AssetBuildPipeline
-
-Runs asset builds in parallel:
-
-```csharp
-// All assets are built concurrently
-// Shader builds run first (they have no dependencies)
-// Model and texture builds run in parallel
-var results = await AssetBuildPipeline.RunBuilds(buildStatuses, cancellationToken);
-```
-
-## File Tools
-
-### FileTools
-
-Utility for working with asset files:
-
-```csharp
-// Check if file is an asset
-bool isAsset = FileTools.IsAsset("file.bin");
-
-// Get file type
-var type = FileTools.GetFileType("model.fbx");  // Returns AssetType.Model
-
-// List assets in directory
-var assets = FileTools.GetFilesInDirectory("./Content");
-```
-
-### MultiFileWatcher
-
-Watches multiple directories for file changes:
-
-```csharp
-var watcher = MultiFileWatcher.Create(
-    new[] { "./Content/models", "./Content/textures" },
-    (changedFile) => { /* rebuild triggered */ }
-);
-```
-
-## GLSL Shader Compilation
-
-Shaders are validated by compiling and linking them with Silk.NET:
-
-```csharp
-var result = GLCompiler.Compile(vertexPath, fragmentPath);
-// result.Success — true if compilation succeeded
-// result.Error — error message if failed
-```
-
-The compiled program is discarded after validation — the source files are used as-is at runtime.
 
 ## See Also
 
