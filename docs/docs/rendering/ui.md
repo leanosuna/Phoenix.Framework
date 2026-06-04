@@ -86,7 +86,7 @@ UI.DrawText("Large text", new Vector2(100, 100), Vector4.One, 24);
 
 Centralized error reporting from all framework subsystems and you, the user. Errors are displayed as an overlay and logged.  
 Useful for errors that may not be critical, but helpful to be seen at runtime.  
-Goes well together with [rendering halt](../../core/game#rendering-halt), as UI is always kept active.
+Goes well together with [rendering halt](../core/game.md#rendering-halt), as UI is always kept active.
 
 ```csharp
 // Add with caller info (auto-filled by compiler attributes)

@@ -37,7 +37,7 @@ var model2 = AssetLoader.LoadModel("characters/robot");
 ```
 
 
-## Asset Manifest
+## AssetManifest
 
 A JSON file that maps asset names to file paths.
 

@@ -6,7 +6,7 @@ Interacting with shaders is done via ShaderHelper classes.
 ## ShaderHelper class
 
 On sucessfull build, the [AssetTool](../asset-pipeline/asset-tool.md) generates a child class of ShaderHelper combining Shader + name of your shader  
-You're able to customize the namespace on the class [asset manifest](../asset-pipeline/loading.md#asset manifest)  
+You're able to customize the namespace on the generated class in the [asset manifest](../asset-pipeline/loading.md#assetmanifest).
 
 Both the parent, and any child class generated are declared ```partial``` so you are able to extend them as you see fit.
 
