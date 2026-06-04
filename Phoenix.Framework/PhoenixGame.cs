@@ -307,14 +307,7 @@ namespace Phoenix.Framework
 
             UI.Render();
         }
-
-        
-        
-
-        }
-        
-        
-
+                
         private void InternalFramebufferResize(Vector2D<int> size)
         {
             WindowSize = new Vector2(size.X, size.Y);
