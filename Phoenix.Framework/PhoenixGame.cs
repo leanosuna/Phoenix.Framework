@@ -136,6 +136,7 @@ namespace Phoenix.Framework
         /// <summary>
         /// This optional method gets called every time the window gets resized.
         /// </summary>
+        /// <param name="size">The new window size</param>
         protected virtual void OnWindowResize(Vector2 size)
         {
 
@@ -254,7 +255,6 @@ namespace Phoenix.Framework
             var str = "Loading game assets...";
 
             UI.DrawCenteredText(str,new Vector2(WindowSize.X / 2, WindowSize.Y / 2), Vector4.One, 30);
-            UI.Render();
         }
         double _timerSamplerFPS = 0;
         double _timerSamplerFT = 0;
@@ -281,6 +281,7 @@ namespace Phoenix.Framework
             if (!_delayedLoadDone)
             {
                 InitialLoadScreen();
+                UI.Render();
                 return;
             }
             UI.Update(deltaTime);
@@ -307,7 +308,12 @@ namespace Phoenix.Framework
             UI.Render();
         }
 
-               
+        
+        
+
+        }
+        
+        
 
         private void InternalFramebufferResize(Vector2D<int> size)
         {

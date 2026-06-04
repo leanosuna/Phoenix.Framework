@@ -152,7 +152,7 @@ namespace Phoenix.Framework.Rendering.Textures
             GL.TexParameter(TextureTarget.Texture2D, GLEnum.TextureWrapT, WrapT);
             GL.TexParameter(TextureTarget.Texture2D, GLEnum.TextureMinFilter, FilterMin);
             GL.TexParameter(TextureTarget.Texture2D, GLEnum.TextureMagFilter, FilterMag);
-
+            
             GL.TexParameter(TextureTarget.Texture2D, GLEnum.TextureBaseLevel, 0);
             GL.TexParameter(TextureTarget.Texture2D, GLEnum.TextureMaxLevel, MipCount - 1);
 

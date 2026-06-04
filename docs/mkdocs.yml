@@ -1,5 +1,9 @@
-site_name: Phoenix 
-site_url: https://leanosuna.github.io/Phoenix/
+site_name: Phoenix Framework
+site_url: https://leanosuna.github.io/Phoenix.Framework
+
+repo_name: Phoenix Framework
+repo_url: https://github.com/leanosuna/Phoenix.Framework
+
 theme:
   name: material
   features:
@@ -14,27 +18,78 @@ theme:
     - content.code.copy
   language: en
   palette:
-    - scheme: default 
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/link
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
       toggle:
         icon: material/toggle-switch
-        name: Switch to dark mode    
-      primary: scheme
-      accent: lime
-
-    - scheme: slate
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: indigo
       toggle:
-        icon: material/toggle-switch-off-outline 
-        name: Switch to light mode
-      primary: scheme
-      accent: lime
+        icon: material/toggle-switch-off
+        name: Switch to system preference
+  font:
+    text: Roboto
+    code: Roboto Mono
+  favicon: assets/phnx.ico
+  logo: assets/phnx.ico
+
 plugins:
-  # - social
   - search
 
+
+extra:
+  generator: true
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/leanosuna/Phoenix.Framework
+      name: Phoenix.Framework
+    - icon: fontawesome/brands/github
+      link: https://github.com/leanosuna/Phoenix.AssetTool
+      name: Phoenix.AssetTool
 nav:
   - Home: index.md
-  # - Getting Started: getting-started.md
-  # - API: api.md
+  - Getting Started: getting-started.md
+  - Core Systems:
+      - Game Loop: core/game.md
+      - Graphics & Rendering: core/graphics.md
+      - Camera: core/camera.md
+      - Input: core/input.md
+  - Rendering:
+      - Shaders: rendering/shaders.md
+      - Textures: rendering/textures.md
+      - Models & Animation: rendering/models.md
+      - UI & ImGui: rendering/ui.md
+      - Gizmos: rendering/gizmos.md
+  - Collision System:
+      - Overview: collisions/overview.md
+      - Ray Casting: collisions/ray.md
+      - Bounding Spheres: collisions/spheres.md
+      - Frustums & Boxes: collisions/frustum-box.md
+  - Audio: audio/sound.md
+  - Asset Pipeline:
+      - Loading Assets: asset-pipeline/loading.md
+      - Asset Tool: asset-pipeline/asset-tool.md
+  - Utilities:
+      - Math Helpers: math/math.md
+      - Logging: utilities/logging.md
 
 extra_css:
 - stylesheets/extra.css
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
