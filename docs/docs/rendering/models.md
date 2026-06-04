@@ -5,13 +5,10 @@ Phoenix loads 3D models from binary format (compiled from Assimp by [AssetTool](
 ## Loading Models
 
 ```csharp
-// Load from asset manifest
-var model = AssetLoader.LoadModel("characters/robot");
-
-// Load as static model
+// Load a static model
 var staticModel = (Model)AssetLoader.LoadModel("props/box");
 
-// Load as animated model
+// Load an animated model
 var animatedModel = (AnimatedModel)AssetLoader.LoadModel("characters/walk");
 ```
 
@@ -47,9 +44,9 @@ foreach (var part in model.Parts)
     foreach (var mesh in part.Meshes)
     {
         // Set your shader uniforms (model matrix, textures, etc.)
-        shader.SetUniform("uModelMatrix", mesh.Transform);
-        shader.SetUniform("uAlbedo", albedoTexture, slot: 0);
-        shader.SetAsCurrentGLProgram();
+        ShaderBasicModel.Use();
+        ShaderBasicModel.World.Set(mesh.Transform);
+        ShaderBasicModel.Albedo.Set(albedoTexture);
 
         // Draw the mesh
         mesh.Draw();
@@ -59,14 +56,12 @@ foreach (var part in model.Parts)
 
 ## Rendering an Animated Model
 
-### Setup
 
 ```csharp
 var model = (AnimatedModel)AssetLoader.LoadModel("characters/robot");
 model.SetAnimation(0);  // Select animation by index
 ```
 
-### In Update Loop
 
 ```csharp
 protected override void Update(double dt)
@@ -81,8 +76,8 @@ protected override void Render(double dt)
         foreach (var mesh in part.Meshes)
         {
             // Pass bone matrices to shader
-            shader.SetUniform("boneMatrices", model.FinalBoneMatrices);
-            shader.SetAsCurrentGLProgram();
+            ShaderAnimated.Use();
+            ShaderAnimated.BoneMatrices.Set(model.FinalBoneMatrices));
             mesh.Draw();
         }
     }
@@ -178,23 +173,6 @@ The shader applies skinning using the 4 bone IDs and weights per vertex:
 for (int i = 0; i < 4; i++) {
     skinPos += boneMatrices[int(boneIds[i])][i] * boneWeights[i];
 }
-```
-
-## Binary Model Format
-
-Models are stored as `.bin` files compiled by [AssetTool](../asset-pipeline/asset-tool.md):
-
-```
-Header: "Model" + version + isAnimated + hasTangents
-├── Parts[]
-│     └── Name, Meshes[]
-│           └── Name, Indices[], Transform, Vertices[]
-└── (if animated)
-     ├── InverseGlobalTransform[]
-     ├── AnimatorNodes[]
-     └── Animations[]
-           └── Name, Duration, TicksPerSecond
-                 └── BoneKeyframes[][]
 ```
 
 ## See Also
