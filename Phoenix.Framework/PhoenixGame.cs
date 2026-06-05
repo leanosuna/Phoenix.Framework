@@ -1,7 +1,4 @@
-﻿using System.Numerics;
-using Silk.NET.Maths;
-using Silk.NET.OpenGL;
-using Silk.NET.Windowing;
+﻿using Phoenix.Framework.AssetImport;
 using Phoenix.Framework.Cameras;
 using Phoenix.Framework.Input;
 using Phoenix.Framework.Network;
@@ -11,8 +8,14 @@ using Phoenix.Framework.Rendering.GUI;
 using Phoenix.Framework.Rendering.RT;
 using Phoenix.Framework.Rendering.Shaders;
 using Phoenix.Framework.Sound;
-using Phoenix.Framework.AssetImport;
+using Silk.NET.Core;
+using Silk.NET.Maths;
+using Silk.NET.OpenGL;
+using Silk.NET.Windowing;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 using System.Drawing;
+using System.Numerics;
 
 namespace Phoenix.Framework
 {
@@ -155,7 +158,8 @@ namespace Phoenix.Framework
             Log.Info("Game starting");
             Window.Center();
             GL = GL.GetApi(Window);
-            
+            SetDefaultIcon();
+
             InputManager = new InputManager(this);
             UI = new UI(this);
             RTManager = new RTManager(this);
@@ -321,7 +325,33 @@ namespace Phoenix.Framework
             OnClose();
         }
 
+        public void SetDefaultIcon()
+        {
+            SetIcon(EmbeddedHelper.ExtractPath("phnx.png", "Files.Icons"));
+        }
+        public void SetCustomWindowIcon(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            SetIcon(path);
+        }
+        private void SetIcon(string path)
+        {
+            using Image<Rgba32> image = Image.Load<Rgba32>(path);
+
+            int w = image.Width;
+            int h = image.Height;
+
+            (Vector2 s, byte[] d) = (new Vector2(w, h), new byte[w * h * 4]);
+            image.CopyPixelDataTo(d);
+            var img = new RawImage(w, h, (Memory<byte>)d);
+
+            Window.SetWindowIcon(ref img);
+        }
+
         
+
         //public static void CheckGLError(string label)
         //{
         //    var err = GL.GetError();
