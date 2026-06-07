@@ -2,7 +2,7 @@
 using System;
 using System.Numerics;
 
-namespace Phoenix.Framework.Rendering
+namespace Phoenix.Framework.Maths
 {
     public static class MathHelper
     {

@@ -1,4 +1,5 @@
-﻿using Phoenix.Framework.Rendering.Geometry.Model.Animations;
+﻿using Phoenix.Framework.Maths;
+using Phoenix.Framework.Rendering.Geometry.Model.Animations;
 using System.Numerics;
 
 namespace Phoenix.Framework.Rendering.Geometry.Model
