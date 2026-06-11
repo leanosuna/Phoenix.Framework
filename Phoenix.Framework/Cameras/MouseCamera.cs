@@ -1,4 +1,5 @@
-﻿using Phoenix.Framework.Rendering;
+﻿using Phoenix.Framework.Maths;
+
 using System.Numerics;
 
 namespace Phoenix.Framework.Cameras

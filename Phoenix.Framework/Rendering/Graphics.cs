@@ -1,4 +1,5 @@
-﻿using Phoenix.Framework.Rendering.GUI;
+﻿using Phoenix.Framework.Maths;
+using Phoenix.Framework.Rendering.GUI;
 using Phoenix.Framework.Rendering.RT;
 using Silk.NET.Input;
 using Silk.NET.Maths;

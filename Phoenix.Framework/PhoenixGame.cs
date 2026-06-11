@@ -1,9 +1,11 @@
 ﻿using Phoenix.Framework.AssetImport;
 using Phoenix.Framework.Cameras;
 using Phoenix.Framework.Input;
+using Phoenix.Framework.Maths;
 using Phoenix.Framework.Network;
 using Phoenix.Framework.Rendering;
 using Phoenix.Framework.Rendering.Gizmos;
+using Phoenix.Framework.Rendering.Gizmos.Geometries.Primitives;
 using Phoenix.Framework.Rendering.GUI;
 using Phoenix.Framework.Rendering.RT;
 using Phoenix.Framework.Rendering.Shaders;
@@ -186,6 +188,7 @@ namespace Phoenix.Framework
         private void DelayedLoad()
         {
             FullScreenQuad = new FullScreenQuad(this);
+            Primitive.SetGL(GL);
             Gizmos = new Gizmos(this);
             SoundManager.Initialize();
             //NetworkManager = new NetworkManager(this);
