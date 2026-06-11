@@ -11,10 +11,6 @@ public abstract class PrimitiveInfo
     public bool Tangents = false;
     public bool Bitangents = false;
     
-    public Vector3 Size = Vector3.One;
-
-    public bool FlipFaces = false;
-    
     public PrimitiveInfo()
     {
         

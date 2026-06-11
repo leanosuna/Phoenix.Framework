@@ -12,59 +12,10 @@ public class Cube : Primitive
     public Cube(InfoCube cubeInfo) 
     {
         CubeInfo = cubeInfo;
-
+        _primitiveInfo = cubeInfo;
         BuildMesh();
     }
-
-    public override void BuildMesh()
-    {
-        var vdd = new VertexDeclarationBuilder().AddVertex3f();
-
-        var uv = CubeInfo.Uv;
-        var n = CubeInfo.Normals;
-        var t = CubeInfo.Tangents;
-        var bt = CubeInfo.Bitangents;
-        
-        if(uv)
-            vdd.AddVertex2f();
-        if(n)
-            vdd.AddVertex3f();
-        if(t)
-            vdd.AddVertex3f();
-        if(bt)
-            vdd.AddVertex3f();
-            
-        var vd = vdd.Build();
-
-        VertexBufferBuilder vbb = VertexBufferBuilder.BuildPos();
-        uint[] indices = []; 
-        if(!uv && !n)
-        {
-            VertexIndexBufferPos(ref vbb, ref indices);
-        }
-        else if(uv && !n)
-        {
-            vbb = VertexBufferBuilder.BuildPosUv();
-            VertexIndexBufferPosUv(ref vbb, ref indices);
-        }
-        else if(uv && n)
-        {
-            vbb = VertexBufferBuilder.BuildPosUvNorm();
-            // VertexIndexBufferPosUvNorm(ref vbb, ref indices);
-        }
-        
-        vbb.Build();
-
-        var vertices = vbb.Build();
-        _mesh = new MeshBuilder<uint>(GL)
-            .SetDrawType(CubeInfo.MeshPrimitiveType)
-            .SetVertexDeclaration(vd)
-            .SetIndices(indices)
-            .SetVertexData(vertices)
-            .Build();
-    }
-
-    private void VertexIndexBufferPos(ref VertexBufferBuilder vb, ref uint[] indices)
+    protected override void VertexIndexBufferPos(ref VertexBufferBuilder vb, ref uint[] indices)
     {
         vb.Add(new Vector3(0.5f, 0.5f, 0.5f));
         vb.Add(new Vector3(-0.5f, 0.5f, 0.5f));
@@ -94,7 +45,7 @@ public class Cube : Primitive
         ];
     }
 
-    private void VertexIndexBufferPosUv(ref VertexBufferBuilder vbb, ref uint[] indices)
+    protected override void VertexIndexBufferPosUv(ref VertexBufferBuilder vbb, ref uint[] indices)
     {
         vbb.Add(new Vector3(-0.5f, -0.5f, 0.5f), new Vector2(0, 1));
         vbb.Add(new Vector3(0.5f, -0.5f, 0.5f), new Vector2(1, 1));
@@ -148,5 +99,89 @@ public class Cube : Primitive
         ];
     }
 
+    protected override void VertexIndexBufferPosUvNorm(ref VertexBufferBuilder vbb, ref uint[] indices)
+    {
+        // Front (Z+)
+        vbb.Add(new Vector3(-0.5f, -0.5f, 0.5f), new Vector2(0, 1), new Vector3(0, 0, 1));
+        vbb.Add(new Vector3(0.5f, -0.5f, 0.5f), new Vector2(1, 1), new Vector3(0, 0, 1));
+        vbb.Add(new Vector3(0.5f, 0.5f, 0.5f), new Vector2(1, 0), new Vector3(0, 0, 1));
+        vbb.Add(new Vector3(-0.5f, 0.5f, 0.5f), new Vector2(0, 0), new Vector3(0, 0, 1));
+        // Back (Z-)
+        vbb.Add(new Vector3(0.5f, -0.5f, -0.5f), new Vector2(0, 1), new Vector3(0, 0, -1));
+        vbb.Add(new Vector3(-0.5f, -0.5f, -0.5f), new Vector2(1, 1), new Vector3(0, 0, -1));
+        vbb.Add(new Vector3(-0.5f, 0.5f, -0.5f), new Vector2(1, 0), new Vector3(0, 0, -1));
+        vbb.Add(new Vector3(0.5f, 0.5f, -0.5f), new Vector2(0, 0), new Vector3(0, 0, -1));
+        // Left (X-)
+        vbb.Add(new Vector3(-0.5f, -0.5f, -0.5f), new Vector2(0, 1), new Vector3(-1, 0, 0));
+        vbb.Add(new Vector3(-0.5f, -0.5f, 0.5f), new Vector2(1, 1), new Vector3(-1, 0, 0));
+        vbb.Add(new Vector3(-0.5f, 0.5f, 0.5f), new Vector2(1, 0), new Vector3(-1, 0, 0));
+        vbb.Add(new Vector3(-0.5f, 0.5f, -0.5f), new Vector2(0, 0), new Vector3(-1, 0, 0));
+        // Right (X+)
+        vbb.Add(new Vector3(0.5f, -0.5f, 0.5f), new Vector2(0, 1), new Vector3(1, 0, 0));
+        vbb.Add(new Vector3(0.5f, -0.5f, -0.5f), new Vector2(1, 1), new Vector3(1, 0, 0));
+        vbb.Add(new Vector3(0.5f, 0.5f, -0.5f), new Vector2(1, 0), new Vector3(1, 0, 0));
+        vbb.Add(new Vector3(0.5f, 0.5f, 0.5f), new Vector2(0, 0), new Vector3(1, 0, 0));
+        // Top (Y+)
+        vbb.Add(new Vector3(-0.5f, 0.5f, 0.5f), new Vector2(0, 1), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(0.5f, 0.5f, 0.5f), new Vector2(1, 1), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(0.5f, 0.5f, -0.5f), new Vector2(1, 0), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(-0.5f, 0.5f, -0.5f), new Vector2(0, 0), new Vector3(0, 1, 0));
+        // Bottom (Y-)
+        vbb.Add(new Vector3(-0.5f, -0.5f, -0.5f), new Vector2(0, 1), new Vector3(0, -1, 0));
+        vbb.Add(new Vector3(0.5f, -0.5f, -0.5f), new Vector2(1, 1), new Vector3(0, -1, 0));
+        vbb.Add(new Vector3(0.5f, -0.5f, 0.5f), new Vector2(1, 0), new Vector3(0, -1, 0));
+        vbb.Add(new Vector3(-0.5f, -0.5f, 0.5f), new Vector2(0, 0), new Vector3(0, -1, 0));
 
+        indices = [
+            0, 1, 2, 0, 2, 3,
+            4, 5, 6, 4, 6, 7,
+            8, 9,10, 8,10,11,
+            12,13,14, 12,14,15,
+            16,17,18, 16,18,19,
+            20,21,22, 20,22,23
+        ];
+    }
+
+    protected override void VertexIndexBufferPosUvNormTaBt(ref VertexBufferBuilder vbb, ref uint[] indices)
+    {
+        // Front (Z+)
+        vbb.Add(new Vector3(-0.5f, -0.5f, 0.5f), new Vector2(0, 1), new Vector3(0, 0, 1), new Vector3(1, 0, 0), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(0.5f, -0.5f, 0.5f), new Vector2(1, 1), new Vector3(0, 0, 1), new Vector3(1, 0, 0), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(0.5f, 0.5f, 0.5f), new Vector2(1, 0), new Vector3(0, 0, 1), new Vector3(1, 0, 0), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(-0.5f, 0.5f, 0.5f), new Vector2(0, 0), new Vector3(0, 0, 1), new Vector3(1, 0, 0), new Vector3(0, 1, 0));
+        // Back (Z-)
+        vbb.Add(new Vector3(0.5f, -0.5f, -0.5f), new Vector2(0, 1), new Vector3(0, 0, -1), new Vector3(-1, 0, 0), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(-0.5f, -0.5f, -0.5f), new Vector2(1, 1), new Vector3(0, 0, -1), new Vector3(-1, 0, 0), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(-0.5f, 0.5f, -0.5f), new Vector2(1, 0), new Vector3(0, 0, -1), new Vector3(-1, 0, 0), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(0.5f, 0.5f, -0.5f), new Vector2(0, 0), new Vector3(0, 0, -1), new Vector3(-1, 0, 0), new Vector3(0, 1, 0));
+        // Left (X-)
+        vbb.Add(new Vector3(-0.5f, -0.5f, -0.5f), new Vector2(0, 1), new Vector3(-1, 0, 0), new Vector3(0, 0, 1), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(-0.5f, -0.5f, 0.5f), new Vector2(1, 1), new Vector3(-1, 0, 0), new Vector3(0, 0, 1), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(-0.5f, 0.5f, 0.5f), new Vector2(1, 0), new Vector3(-1, 0, 0), new Vector3(0, 0, 1), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(-0.5f, 0.5f, -0.5f), new Vector2(0, 0), new Vector3(-1, 0, 0), new Vector3(0, 0, 1), new Vector3(0, 1, 0));
+        // Right (X+)
+        vbb.Add(new Vector3(0.5f, -0.5f, 0.5f), new Vector2(0, 1), new Vector3(1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(0.5f, -0.5f, -0.5f), new Vector2(1, 1), new Vector3(1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(0.5f, 0.5f, -0.5f), new Vector2(1, 0), new Vector3(1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, 1, 0));
+        vbb.Add(new Vector3(0.5f, 0.5f, 0.5f), new Vector2(0, 0), new Vector3(1, 0, 0), new Vector3(0, 0, -1), new Vector3(0, 1, 0));
+        // Top (Y+)
+        vbb.Add(new Vector3(-0.5f, 0.5f, 0.5f), new Vector2(0, 1), new Vector3(0, 1, 0), new Vector3(1, 0, 0), new Vector3(0, 0, -1));
+        vbb.Add(new Vector3(0.5f, 0.5f, 0.5f), new Vector2(1, 1), new Vector3(0, 1, 0), new Vector3(1, 0, 0), new Vector3(0, 0, -1));
+        vbb.Add(new Vector3(0.5f, 0.5f, -0.5f), new Vector2(1, 0), new Vector3(0, 1, 0), new Vector3(1, 0, 0), new Vector3(0, 0, -1));
+        vbb.Add(new Vector3(-0.5f, 0.5f, -0.5f), new Vector2(0, 0), new Vector3(0, 1, 0), new Vector3(1, 0, 0), new Vector3(0, 0, -1));
+        // Bottom (Y-)
+        vbb.Add(new Vector3(-0.5f, -0.5f, -0.5f), new Vector2(0, 1), new Vector3(0, -1, 0), new Vector3(1, 0, 0), new Vector3(0, 0, 1));
+        vbb.Add(new Vector3(0.5f, -0.5f, -0.5f), new Vector2(1, 1), new Vector3(0, -1, 0), new Vector3(1, 0, 0), new Vector3(0, 0, 1));
+        vbb.Add(new Vector3(0.5f, -0.5f, 0.5f), new Vector2(1, 0), new Vector3(0, -1, 0), new Vector3(1, 0, 0), new Vector3(0, 0, 1));
+        vbb.Add(new Vector3(-0.5f, -0.5f, 0.5f), new Vector2(0, 0), new Vector3(0, -1, 0), new Vector3(1, 0, 0), new Vector3(0, 0, 1));
+
+        indices = [
+            0, 1, 2, 0, 2, 3,
+            4, 5, 6, 4, 6, 7,
+            8, 9,10, 8,10,11,
+            12,13,14, 12,14,15,
+            16,17,18, 16,18,19,
+            20,21,22, 20,22,23
+        ];
+    }
 }

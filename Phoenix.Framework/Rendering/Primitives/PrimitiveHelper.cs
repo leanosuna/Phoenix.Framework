@@ -12,6 +12,7 @@ public static class PrimitiveHelper
     private static GL GL;
 
     private static Dictionary<InfoCube, Cube> _primitivesCube = new();
+    private static Dictionary<InfoSphere, Sphere> _primitivesSphere = new();
     internal static void Init(GL gl)
     {
         GL = gl;
@@ -32,6 +33,27 @@ public static class PrimitiveHelper
     public static Cube Cube()
     {
         return Cube(new InfoCube{
+            MeshPrimitiveType = PrimitiveType.Triangles,
+            Uv = true,
+            Normals = true
+            }); 
+    }
+
+    public static Sphere Sphere(InfoSphere info)
+    {
+        if(!_primitivesSphere.TryGetValue(info, out var sphere))
+        {
+            sphere = new Sphere(info);
+            _primitivesSphere.Add(info, sphere);
+        }
+
+        return sphere;
+    }
+
+    public static Sphere Sphere()
+    {
+        return Sphere(new InfoSphere{
+            SubDivisions = 16,
             MeshPrimitiveType = PrimitiveType.Triangles,
             Uv = true,
             Normals = true
