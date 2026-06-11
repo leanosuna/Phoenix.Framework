@@ -45,6 +45,36 @@ public class Cube : Primitive
         ];
     }
 
+    protected override void VertexIndexBufferLines(ref VertexBufferBuilder vb, ref uint[] indices)
+    {
+        vb.Add(new Vector3(0.5f, 0.5f, 0.5f));
+        vb.Add(new Vector3(-0.5f, 0.5f, 0.5f));
+        vb.Add(new Vector3(0.5f, -0.5f, 0.5f));
+        vb.Add(new Vector3(-0.5f, -0.5f, 0.5f));
+        vb.Add(new Vector3(0.5f, 0.5f, -0.5f));
+        vb.Add(new Vector3(-0.5f, 0.5f, -0.5f));
+        vb.Add(new Vector3(0.5f, -0.5f, -0.5f));
+        vb.Add(new Vector3(-0.5f, -0.5f, -0.5f));
+
+        indices =
+        [
+            0, 1,
+            0, 2,
+            1, 3,
+            3, 2,
+
+            4, 5,
+            4, 6,
+            5, 7,
+            7, 6,
+
+            0, 4,
+            1, 5,
+            2, 6,
+            3, 7
+        ];
+    }
+
     protected override void VertexIndexBufferPosUv(ref VertexBufferBuilder vbb, ref uint[] indices)
     {
         vbb.Add(new Vector3(-0.5f, -0.5f, 0.5f), new Vector2(0, 1));

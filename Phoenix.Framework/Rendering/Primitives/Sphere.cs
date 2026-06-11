@@ -150,6 +150,49 @@ public class Sphere : Primitive
         indices = indexList.ToArray();
     }
 
+    protected override void VertexIndexBufferLines(ref VertexBufferBuilder vbb, ref uint[] indices)
+    {
+        var circleSegments = Math.Max(6, SphereInfo.SubDivisions / 4);
+        var indexList = new List<uint>();
+
+        for (var i = 0; i < circleSegments; i++)
+        {
+            var angle = 2f * MathF.PI * i / circleSegments;
+            vbb.Add(new Vector3(MathF.Cos(angle), MathF.Sin(angle), 0f) * 0.5f);
+        }
+        for (var i = 0; i < circleSegments; i++)
+        {
+            indexList.Add((uint)i);
+            indexList.Add((uint)((i + 1) % circleSegments));
+        }
+
+        for (var i = 0; i < circleSegments; i++)
+        {
+            var angle = 2f * MathF.PI * i / circleSegments;
+            vbb.Add(new Vector3(MathF.Cos(angle), 0f, MathF.Sin(angle)) * 0.5f);
+        }
+        var xzOffset = (uint)circleSegments;
+        for (var i = 0; i < circleSegments; i++)
+        {
+            indexList.Add(xzOffset + (uint)i);
+            indexList.Add(xzOffset + (uint)((i + 1) % circleSegments));
+        }
+
+        for (var i = 0; i < circleSegments; i++)
+        {
+            var angle = 2f * MathF.PI * i / circleSegments;
+            vbb.Add(new Vector3(0f, MathF.Cos(angle), MathF.Sin(angle)) * 0.5f);
+        }
+        var yzOffset = 2 * (uint)circleSegments;
+        for (var i = 0; i < circleSegments; i++)
+        {
+            indexList.Add(yzOffset + (uint)i);
+            indexList.Add(yzOffset + (uint)((i + 1) % circleSegments));
+        }
+
+        indices = indexList.ToArray();
+    }
+
     protected override void VertexIndexBufferPosUvNormTaBt(ref VertexBufferBuilder vbb, ref uint[] indices)
     {
         var lonSteps = Math.Max(SphereInfo.SubDivisions, 3);

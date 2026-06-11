@@ -31,6 +31,22 @@ public abstract class Primitive
         var t = _primitiveInfo.Tangents;
         var bt = _primitiveInfo.Bitangents;
 
+        if (_primitiveInfo.MeshPrimitiveType == PrimitiveType.Lines)
+        {
+            var lineVd = vdd.Build();
+            var lineVbb = VertexBufferBuilder.BuildPos();
+            uint[] lineIndices = [];
+            VertexIndexBufferLines(ref lineVbb, ref lineIndices);
+            var lineVertices = lineVbb.Build();
+            _mesh = new MeshBuilder<uint>(GL)
+                .SetDrawType(PrimitiveType.Lines)
+                .SetVertexDeclaration(lineVd)
+                .SetIndices(lineIndices)
+                .SetVertexData(lineVertices)
+                .Build();
+            return;
+        }
+
         if (uv)
             vdd.AddVertex2f();
         if (n)
@@ -64,9 +80,6 @@ public abstract class Primitive
             VertexIndexBufferPosUvNormTaBt(ref vbb, ref indices);
         }
 
-        if (_primitiveInfo.MeshPrimitiveType == PrimitiveType.Lines && uv)
-            indices = TrianglesToLines(indices);
-
         var vertices = vbb.Build();
         _mesh = new MeshBuilder<uint>(GL)
             .SetDrawType(_primitiveInfo.MeshPrimitiveType)
@@ -80,19 +93,5 @@ public abstract class Primitive
     protected abstract void VertexIndexBufferPosUv(ref VertexBufferBuilder vbb, ref uint[] indices);
     protected abstract void VertexIndexBufferPosUvNorm(ref VertexBufferBuilder vbb, ref uint[] indices);
     protected abstract void VertexIndexBufferPosUvNormTaBt(ref VertexBufferBuilder vbb, ref uint[] indices);
-
-    protected static uint[] TrianglesToLines(uint[] triangleIndices)
-    {
-        var lines = new List<uint>(triangleIndices.Length * 2);
-        for (var i = 0; i < triangleIndices.Length; i += 3)
-        {
-            lines.Add(triangleIndices[i]);
-            lines.Add(triangleIndices[i + 1]);
-            lines.Add(triangleIndices[i + 1]);
-            lines.Add(triangleIndices[i + 2]);
-            lines.Add(triangleIndices[i + 2]);
-            lines.Add(triangleIndices[i]);
-        }
-        return lines.ToArray();
-    }
+    protected abstract void VertexIndexBufferLines(ref VertexBufferBuilder vbb, ref uint[] indices);
 }
