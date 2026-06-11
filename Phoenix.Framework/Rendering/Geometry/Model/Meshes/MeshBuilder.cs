@@ -84,8 +84,7 @@ namespace Phoenix.Framework.Rendering.Geometry.Model.Meshes
                 _mesh._drawElementsType = DrawElementsType.UnsignedByte;
             }
 
-            Log.Debug($"element type {_mesh._drawElementsType.ToString()}");
-
+            
             _mesh._VAHandle = GL.GenVertexArray();
             GL.BindVertexArray(_mesh._VAHandle);
 
@@ -94,8 +93,7 @@ namespace Phoenix.Framework.Rendering.Geometry.Model.Meshes
 
             //set data 
             var totalBytes = _data.Length;
-            Log.Debug($"data length {totalBytes}");
-
+            
             if (totalBytes == 0)
                 throw new Exception("data not set");
 
@@ -143,16 +141,7 @@ namespace Phoenix.Framework.Rendering.Geometry.Model.Meshes
                 attributeByteOffset += item.SizeBytes;
                 GL.EnableVertexAttribArray((uint)i);
 
-                var typestr = item.IsInt ? "Int":"Float";
-                Log.Debug($"item {i} size {item.Size} type {typestr} stride {vd.StrideBytes}");
-
             }
-
-            Log.Debug($"final offset {attributeByteOffset}");
-
-
-
-
 
             return _mesh;
         }

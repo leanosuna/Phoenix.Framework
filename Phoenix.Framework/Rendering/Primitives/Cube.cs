@@ -14,6 +14,7 @@ public class Cube : Primitive
         CubeInfo = cubeInfo;
         _primitiveInfo = cubeInfo;
         BuildMesh();
+        Log.Debug("c");
     }
     protected override void VertexIndexBufferPos(ref VertexBufferBuilder vb, ref uint[] indices)
     {

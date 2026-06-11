@@ -152,7 +152,7 @@ public class Sphere : Primitive
 
     protected override void VertexIndexBufferLines(ref VertexBufferBuilder vbb, ref uint[] indices)
     {
-        var circleSegments = Math.Max(6, SphereInfo.SubDivisions / 4);
+        var circleSegments = Math.Max(6, SphereInfo.SubDivisions);
         var indexList = new List<uint>();
 
         for (var i = 0; i < circleSegments; i++)
