@@ -155,8 +155,6 @@ dotnet run
 A window opens with a black background, the camera is positioned at `(0, 0, -10)` looking toward the origin. 
 A wireframe cube from Gizmos is rendered spinning around in the center of the screen.
 
-TODO: get this out of here Press **F11** to toggle render halt (pause rendering while keeping the game loop running).
-
 ## Next Steps
 
 - [Core Systems](core/game.md) — understand the game loop lifecycle
