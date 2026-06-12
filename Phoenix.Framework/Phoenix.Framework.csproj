@@ -10,7 +10,7 @@
     <Company></Company>
     <Product></Product>
     <Authors>leanosuna</Authors>
-    <Description>3D rendering and game framework using Silk.NET and OpenGL</Description>
+    <Description>A lightweight 3D game framework built on Silk.NET and OpenGL for C#.  </Description>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnforceCodeStyleInBuild>True</EnforceCodeStyleInBuild>
     <AnalysisLevel>6.0</AnalysisLevel>
