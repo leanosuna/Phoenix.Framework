@@ -76,7 +76,7 @@ namespace Phoenix.Framework.Rendering
 
         #region GL CFG
         private (bool, GLEnum) _depth = default!;
-        public void SetDepthTest(bool enable, GLEnum type = GLEnum.Less)
+        public void SetDepthTest(bool enable, GLEnum type = GLEnum.Lequal)
         {
             if (_depth == (enable, type))
                 return;

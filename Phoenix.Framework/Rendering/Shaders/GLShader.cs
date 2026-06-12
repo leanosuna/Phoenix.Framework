@@ -157,6 +157,12 @@ namespace Phoenix.Framework.Rendering.Shaders
             SetUniform(name, slot);
         }
 
+        public void SetTextureUniform(string name, GLTextureCube tex, int slot)
+        {
+            tex.Bind(TextureUnit.Texture0 + slot);
+            SetUniform(name, slot);
+        }
+
         public void SetTextureUniform(int location, uint tex, int slot)
         {
             GL.ActiveTexture(TextureUnit.Texture0 + slot);
@@ -169,6 +175,11 @@ namespace Phoenix.Framework.Rendering.Shaders
             SetUniform(location, slot);
         }
 
+        public void SetTextureUniform(int location, GLTextureCube tex, int slot)
+        {
+            tex.Bind(TextureUnit.Texture0 + slot);
+            SetUniform(location, slot);
+        }
         public void Dispose()
         {
             GL.DeleteProgram(_handle);

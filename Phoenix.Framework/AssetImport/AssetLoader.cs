@@ -2,6 +2,7 @@
 using Phoenix.Framework.Rendering.Shaders;
 using Phoenix.Framework.Rendering.Textures;
 using Silk.NET.OpenGL;
+using System.Xml.Linq;
 
 namespace Phoenix.Framework.AssetImport
 {
@@ -13,6 +14,7 @@ namespace Phoenix.Framework.AssetImport
 
         private static readonly Dictionary<string, Model> _loadedModels = new();
         private static readonly Dictionary<string, GLTexture> _loadedTextures = new();
+        private static readonly Dictionary<string[], GLTextureCube> _loadedTexturesCube = new();
         private static readonly Dictionary<string, GLShader> _loadedShaders = new();
         private static AssetManifest _assetManifest = default!;
         private static GL GL = default!;
@@ -39,6 +41,12 @@ namespace Phoenix.Framework.AssetImport
 
             return model;
         }
+
+        public static AnimatedModel LoadAnimatedModel(string name)
+        {
+            return (AnimatedModel)LoadModel(name);
+        }
+
         public static GLTexture LoadTexture(string name)
         {
             var absolutePath = AssetAbsolutePath(name);
@@ -50,6 +58,14 @@ namespace Phoenix.Framework.AssetImport
             return LoadShaderAbs(path.absVert, path.absFrag);
         }
 
+        public static GLTextureCube LoadTextureCube(string[] names)
+        {
+            if (names.Length != 6)
+                throw new ArgumentOutOfRangeException($"paths count {names.Length} must be 6");
+
+            var absolutePaths = names.Select(AssetAbsolutePath).ToArray();
+            return LoadTextureCubeAbs(absolutePaths);
+        }
         private static GLTexture LoadTextureAbs(string absolutePath)
         {
             if (!_loadedTextures.TryGetValue(absolutePath, out var tex))
@@ -60,6 +76,16 @@ namespace Phoenix.Framework.AssetImport
 
             return tex;
         }
+        private static GLTextureCube LoadTextureCubeAbs(string[] absolutePaths)
+        {
+            if (!_loadedTexturesCube.TryGetValue(absolutePaths, out var texCube))
+            {
+                texCube = BinaryTextureReader.LoadCube(GL, absolutePaths);
+                _loadedTexturesCube[absolutePaths] = texCube;
+            }
+            return texCube;
+        }
+        
 
         private static GLShader LoadShaderAbs(string vert, string frag)
         {
