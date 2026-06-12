@@ -29,6 +29,11 @@ namespace Phoenix.Framework.Rendering.Shaders
             tex.Bind(TextureUnit.Texture0 + _slot);
             _shader.SetTextureUniform(_location, tex, _slot);
         }
+        public void Set(GLTextureCube texCube)
+        {
+            texCube.Bind(TextureUnit.Texture0 + _slot);
+            _shader.SetTextureUniform(_location, texCube, _slot);
+        }
         public void Set(uint tex)
         {
             _shader.SetTextureUniform(_location, tex, _slot);

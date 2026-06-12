@@ -1,17 +1,15 @@
-﻿using Phoenix.Framework.Rendering.GUI;
-using Phoenix.Framework.Rendering.RT;
+﻿using Phoenix.Framework.Rendering.RT;
 using Silk.NET.OpenGL;
 using System.Numerics;
-using System.Runtime.Intrinsics.X86;
 
 namespace Phoenix.Framework.Rendering.Textures
 {
     public class GLTexture
     {
-        const int GL_RGBA8 = 0x8058;
-        const int GL_COMPRESSED_RGBA_S3TC_DXT1_EXT = 0x83F1; // BC1
-        const int GL_COMPRESSED_RGBA_S3TC_DXT5_EXT = 0x83F3; // BC3
-        const int GL_COMPRESSED_RG_RGTC2 = 0x8DBD; // BC5
+        internal const int GL_RGBA8 = 0x8058;
+        internal const int GL_COMPRESSED_RGBA_S3TC_DXT1_EXT = 0x83F1; // BC1
+        internal const int GL_COMPRESSED_RGBA_S3TC_DXT5_EXT = 0x83F3; // BC3
+        internal const int GL_COMPRESSED_RG_RGTC2 = 0x8DBD; // BC5
 
         public string Name { get; private set; } = default!;
         public uint Handle { get; private set; } = default!;
@@ -29,20 +27,19 @@ namespace Phoenix.Framework.Rendering.Textures
 
         private GL GL;
 
-        public GLTexture(GL gl, string name, int wrapS, int wrapT, int fMin, int fMag, float anisotropic,
-            byte format, int mipCount, Vector2[] mipSizes, byte[][] encodedBytes)
+        internal GLTexture(GL gl, TextureData data)
         {
             GL = gl;
-            Name = name;
-            WrapS = wrapS;
-            WrapT = wrapT;
-            FilterMin = fMin;
-            FilterMag = fMag;
-            Anisotropic = anisotropic;
-            Format = format;
-            MipCount = mipCount;
-            MipSizes = mipSizes;
-            EncodedBytes = encodedBytes;
+            Name = data.Name;
+            WrapS = data.WrapS;
+            WrapT = data.WrapT;
+            FilterMin = data.FilterMin;
+            FilterMag = data.FilterMag;
+            Anisotropic = data.Anisotropic;
+            Format = data.Format;
+            MipCount = data.MipCount;
+            MipSizes = data.MipSizes;
+            EncodedBytes = data.EncodedBytes;
             Handle = GL.GenTexture();
             Bind();
             LoadIntoGL();
@@ -50,7 +47,7 @@ namespace Phoenix.Framework.Rendering.Textures
             LoadParametersIntoGL();
         }
 
-        public GLTexture(GL gl, RenderTextureInfo info)
+        internal GLTexture(GL gl, RenderTextureInfo info)
         {
             GL = gl;
             WrapS = (int)info.WrapS;
