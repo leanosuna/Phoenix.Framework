@@ -13,6 +13,18 @@ dotnet pat Content/asset-manifest.json init
 # Start the AssetTool GUI
 dotnet pat Content/asset-manifest.json gui
 
+# Clean the ContentBin folder
+dotnet pat Content/asset-manifest.json clean
+
+# add files to the manifest
+dotnet pat Content/asset-manifest.json add [path-to-file] [path-to-file2] ...
+
+# add all files in Content/ to the manifest
+dotnet pat Content/asset-manifest.json add . 
+
+# remove files from the manifest
+dotnet pat Content/asset-manifest.json rem [path-to-file] [path-to-file2] ...
+
 # List all of the files in the manifest
 dotnet pat Content/asset-manifest.json list
 

@@ -16,7 +16,7 @@ cd MyPhoenixGame
 dotnet new sln -n MyPhoenixGame
 dotnet new console -n MyPhoenixGame -o MyPhoenixGame
 
-dotnet sln MyPhoenixGame.slnx add MyPhoenixGame/MyPhoenixGame.csproj
+dotnet sln add MyPhoenixGame/MyPhoenixGame.csproj
 ```
 ### Now, install the framework and the asset tool.
 ```bash
@@ -31,6 +31,7 @@ mkdir Content
 dotnet pat Content/asset-manifest.json init
 ```
 
+### In your csproj
 Make sure the manifest file and the content files are included on build
 ```xml
 <ItemGroup>
@@ -38,6 +39,14 @@ Make sure the manifest file and the content files are included on build
     <None Include="Content\asset-manifest.json" CopyToOutputDirectory="PreserveNewest" />
 </ItemGroup>
 ```
+
+Require asset build to complete before compilation
+```xml
+ <Target Name="Phoenix-AssetTool-Build" BeforeTargets="BeforeBuild">
+    <Exec Command="dotnet pat Content/asset-manifest.json build" StandardOutputImportance="high" />
+  </Target>
+```
+
 ## Understanding the PhoenixGame lifecycle
 
 Most systems are internally handled, the game class provides the following methods:
@@ -61,6 +70,8 @@ using Phoenix.Framework;
 using Phoenix.Framework.Cameras;
 using Phoenix.Framework.Rendering;
 using System.Numerics;
+
+namespace Phoenix.Example;
 
 public class Game : PhoenixGame
 {
@@ -136,6 +147,9 @@ public class Game : PhoenixGame
 ## Entry Point
 
 ```csharp
+
+namespace Phoenix.Example;
+
 public static class Program
 {
     public static void Main()
