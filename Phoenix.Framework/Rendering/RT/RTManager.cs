@@ -72,7 +72,7 @@ namespace Phoenix.Framework.Rendering.RT
             if (depthBuffer is not null)
             {
                 if (depthBuffer.FollowsWindowSize)
-                    depthBuffer.Size = _game.WindowSize;
+                    depthBuffer.Size = _game.FramebufferSize;
 
                 GL.GenRenderbuffers(1, out uint rboDepth);
                 depthBuffer.Handle = rboDepth;
@@ -127,7 +127,7 @@ namespace Phoenix.Framework.Rendering.RT
 
                 var size = tex.Size;
                 if (tex.FollowsWindowSize)
-                    size = _game.WindowSize;
+                    size = _game.FramebufferSize;
 
                 tex.Texture.Resize(size);
                 
@@ -171,7 +171,7 @@ namespace Phoenix.Framework.Rendering.RT
         internal void TrueRenderToScreen()
         {
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
-            GL.Viewport(0, 0, (uint)_game.WindowSize.X, (uint)_game.WindowSize.Y);
+            GL.Viewport(0, 0, (uint)_game.FramebufferSize.X, (uint)_game.FramebufferSize.Y);
         }
 
         internal void HandleWindowResize()

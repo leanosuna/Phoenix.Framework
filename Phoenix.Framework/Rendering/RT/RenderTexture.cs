@@ -36,7 +36,7 @@ namespace Phoenix.Framework.Rendering.RT
             Texture = tex;
             FollowsWindowSize = ti.FollowsWindowSize;
             SizeMultiplier = ti.SizeMultiplier;
-            Size = game.WindowSize;
+            Size = game.FramebufferSize;
         }
 
         public static implicit operator uint(RenderTexture target)

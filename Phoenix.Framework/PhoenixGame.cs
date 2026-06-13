@@ -25,8 +25,11 @@ namespace Phoenix.Framework
         public GL GL { get; private set; } = default!;
         public IWindow Window { get; private set; }
         public Vector2 WindowSize { get; private set; }
+        public Vector2 FramebufferSize { get; private set; }
         public int WindowWidth => (int)WindowSize.X;
         public int WindowHeight => (int)WindowSize.Y;
+        public int FramebufferWidth => (int)FramebufferSize.X;
+        public int FramebufferHeight => (int)FramebufferSize.Y;
         public InputManager InputManager { get; private set; } = default!;
         public FullScreenQuad FullScreenQuad { get; private set; } = default!;
         public Gizmos Gizmos { get; private set; } = default!;
@@ -57,6 +60,7 @@ namespace Phoenix.Framework
 
             Window = Silk.NET.Windowing.Window.Create(options);
             WindowSize = Window.Size.ToNum();
+            FramebufferSize = WindowSize;
 
             Window.Load += InternalLoad;
             Window.Update += InternalUpdate;
@@ -71,6 +75,7 @@ namespace Phoenix.Framework
             Window = Silk.NET.Windowing.Window.Create(options);
 
             WindowSize = Window.Size.ToNum();
+            FramebufferSize = WindowSize;
 
             Window.Load += InternalLoad;
             Window.Update += InternalUpdate;
@@ -160,6 +165,9 @@ namespace Phoenix.Framework
             Window.Center();
             GL = GL.GetApi(Window);
             SetDefaultIcon();
+
+            FramebufferSize = Window.FramebufferSize.ToNum();
+            WindowSize = Window.Size.ToNum();
 
             InputManager = new InputManager(this);
             UI = new UI(this);
@@ -307,7 +315,7 @@ namespace Phoenix.Framework
             var rv = Graphics.RenderViewport;
             Graphics.TrueCopyToScreen(_sceneRT, 0,
                 new Vector4(0,0,rv.Width,rv.Height),
-                new Vector4(0,0,WindowWidth, WindowHeight), rv.Filter);
+                new Vector4(0,0,FramebufferWidth, FramebufferHeight), rv.Filter);
 
             RenderUI();
 
@@ -316,7 +324,9 @@ namespace Phoenix.Framework
                 
         private void InternalFramebufferResize(Vector2D<int> size)
         {
-            WindowSize = new Vector2(size.X, size.Y);
+            FramebufferSize = new Vector2(size.X, size.Y);
+            WindowSize = Window.Size.ToNum();
+
             GL.Viewport(size);
             RTManager.HandleWindowResize();
             OnWindowResize(WindowSize);

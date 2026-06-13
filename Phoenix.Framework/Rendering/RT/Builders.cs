@@ -55,7 +55,7 @@ namespace Phoenix.Framework.Rendering.RT
         public RenderTexture Build()
         {
             if (_ti.FollowsWindowSize)
-                _ti.Size = _game.WindowSize;
+                _ti.Size = _game.FramebufferSize;
 
             var tex = new GLTexture(GL, _ti);
             var rt = new RenderTexture(tex, _ti);

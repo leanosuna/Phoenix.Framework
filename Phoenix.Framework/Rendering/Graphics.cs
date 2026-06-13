@@ -177,7 +177,7 @@ namespace Phoenix.Framework.Rendering
             RenderTarget rt, int srcRTindex, Vector4 srcRect, 
             Vector4 destRect, BlitFramebufferFilter filter = BlitFramebufferFilter.Nearest)
         {
-            CopyTo((rt, srcRTindex, srcRect), (_game._sceneRT, 0, new Vector4(0, 0, _game.WindowWidth, _game.WindowHeight)), filter);
+            CopyTo((rt, srcRTindex, srcRect), (_game._sceneRT, 0, new Vector4(0, 0, _game.FramebufferWidth, _game.FramebufferHeight)), filter);
         }
 
         /// <summary>

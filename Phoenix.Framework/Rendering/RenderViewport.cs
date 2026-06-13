@@ -7,13 +7,13 @@ namespace Phoenix.Framework.Rendering
     public class RenderViewport
     {
         public Vector2 Size { 
-            get => _game.WindowSize * Scale;
+            get => _game.FramebufferSize * Scale;
             set
             {
                 if (value.X < 0 || value.Y < 0)
                     return;
 
-                Scale = value / _game.WindowSize;
+                Scale = value / _game.FramebufferSize;
             }
         }
         public float Width => Size.X;
