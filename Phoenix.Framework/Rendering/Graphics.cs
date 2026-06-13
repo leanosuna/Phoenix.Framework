@@ -200,7 +200,7 @@ namespace Phoenix.Framework.Rendering
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, rt.FrameBuffer);
             GL.ReadBuffer(readBuffer);
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
-            GL.DrawBuffer(GLEnum.Front);
+            GL.DrawBuffer(GLEnum.Back);
 
             GL.BlitFramebuffer((int)srcRect.X, (int)srcRect.Y, (int)srcRect.Z, (int)srcRect.W,
                 (int)destRect.X, (int)destRect.Y, (int)destRect.Z, (int)destRect.W,
