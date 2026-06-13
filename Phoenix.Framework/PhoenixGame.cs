@@ -183,6 +183,7 @@ namespace Phoenix.Framework
 
             GenCommonUBO();
 
+            InternalFramebufferResize(Window.FramebufferSize);
         }
         private unsafe void GenCommonUBO()
         {
