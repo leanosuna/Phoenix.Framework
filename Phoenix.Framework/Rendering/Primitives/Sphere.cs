@@ -4,13 +4,21 @@ using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 using System.Numerics;
 
-namespace Phoenix.Framework.Rendering.Gizmos.Geometries.Primitives;
+namespace Phoenix.Framework.Rendering.Primitives;
 
 public class Sphere : Primitive
 {
     public InfoSphere SphereInfo;
 
-    public Sphere(InfoSphere sphereInfo) 
+    public static Sphere Create(InfoSphere sphereInfo)
+    {
+        return PrimitiveHelper.Sphere(sphereInfo);
+    }
+    public static Sphere Create()
+    {
+        return PrimitiveHelper.Sphere();
+    }
+    internal Sphere(InfoSphere sphereInfo) 
     {
         SphereInfo = sphereInfo;
         _primitiveInfo = sphereInfo;

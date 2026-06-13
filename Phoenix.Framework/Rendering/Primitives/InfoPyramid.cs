@@ -1,4 +1,4 @@
-namespace Phoenix.Framework.Rendering.Gizmos.Geometries.Primitives;
+namespace Phoenix.Framework.Rendering.Primitives;
 
 public class InfoPyramid : PrimitiveInfo
 {

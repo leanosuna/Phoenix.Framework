@@ -5,7 +5,7 @@ using Phoenix.Framework.Maths;
 using Phoenix.Framework.Network;
 using Phoenix.Framework.Rendering;
 using Phoenix.Framework.Rendering.Gizmos;
-using Phoenix.Framework.Rendering.Gizmos.Geometries.Primitives;
+using Phoenix.Framework.Rendering.Primitives;
 using Phoenix.Framework.Rendering.GUI;
 using Phoenix.Framework.Rendering.RT;
 using Phoenix.Framework.Rendering.Shaders;
@@ -16,7 +16,6 @@ using Silk.NET.OpenGL;
 using Silk.NET.Windowing;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-using System.Drawing;
 using System.Numerics;
 
 namespace Phoenix.Framework

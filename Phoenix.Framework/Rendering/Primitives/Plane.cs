@@ -2,13 +2,21 @@ using Phoenix.Framework.Rendering.Geometry.Vertices;
 using Silk.NET.OpenGL;
 using System.Numerics;
 
-namespace Phoenix.Framework.Rendering.Gizmos.Geometries.Primitives;
+namespace Phoenix.Framework.Rendering.Primitives;
 
 public class Plane : Primitive
 {
     public InfoPlane PlaneInfo;
 
-    public Plane(InfoPlane planeInfo)
+    public static Plane Create(InfoPlane planeInfo)
+    {
+        return PrimitiveHelper.Plane(planeInfo);
+    }
+    public static Plane Create()
+    {
+        return PrimitiveHelper.Plane();
+    }
+    internal Plane(InfoPlane planeInfo)
     {
         PlaneInfo = planeInfo;
         _primitiveInfo = planeInfo;

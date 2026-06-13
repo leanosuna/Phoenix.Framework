@@ -1,10 +1,10 @@
-﻿using Phoenix.Framework.Rendering.Gizmos.Geometries.Primitives;
+﻿using Phoenix.Framework.Rendering.Primitives;
 using Phoenix.Framework.Rendering.Shaders;
 using Phoenix.Framework.Collisions;
 using Phoenix.Framework.Maths;
 using Silk.NET.OpenGL;
 using System.Numerics;
-using PrimPlane = Phoenix.Framework.Rendering.Gizmos.Geometries.Primitives.Plane;
+using PrimPlane = Phoenix.Framework.Rendering.Primitives.Plane;
 
 namespace Phoenix.Framework.Rendering.Gizmos
 {
@@ -47,12 +47,12 @@ namespace Phoenix.Framework.Rendering.Gizmos
             GL.BindVertexArray(0);
         }
 
-        public void Update()
+        internal void Update()
         {
             _drawList.Clear();
         }
 
-        public void Render()
+        internal void Render()
         {
             if (!Enabled) return;
             if (game.Camera is null) return;

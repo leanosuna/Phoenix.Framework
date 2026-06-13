@@ -6,7 +6,7 @@ using Silk.NET.GLFW;
 using Silk.NET.OpenGL;
 using System.Numerics;
 
-namespace Phoenix.Framework.Rendering.Gizmos.Geometries.Primitives;
+namespace Phoenix.Framework.Rendering.Primitives;
 
 public abstract class Primitive
 {
@@ -22,7 +22,7 @@ public abstract class Primitive
         _mesh.Draw();
     }    
 
-    public void BuildMesh()
+    protected void BuildMesh()
     {
         var vdd = new VertexDeclarationBuilder().AddVertex3f();
 

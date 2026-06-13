@@ -1,7 +1,7 @@
 using System.Numerics;
 using Silk.NET.OpenGL;
 
-namespace Phoenix.Framework.Rendering.Gizmos.Geometries.Primitives;
+namespace Phoenix.Framework.Rendering.Primitives;
 
 public class InfoCube : PrimitiveInfo
 {

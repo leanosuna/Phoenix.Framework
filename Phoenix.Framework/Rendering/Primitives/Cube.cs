@@ -3,13 +3,21 @@ using Phoenix.Framework.Rendering.Geometry.Model.Meshes;
 using Phoenix.Framework.Rendering.Geometry.Vertices;
 using Silk.NET.OpenGL;
 
-namespace Phoenix.Framework.Rendering.Gizmos.Geometries.Primitives;
+namespace Phoenix.Framework.Rendering.Primitives;
 
 public class Cube : Primitive
 {
     public InfoCube CubeInfo;
 
-    public Cube(InfoCube cubeInfo) 
+    public static Cube Create(InfoCube cubeInfo)
+    {
+        return PrimitiveHelper.Cube(cubeInfo);
+    }
+    public static Cube Create()
+    {
+        return PrimitiveHelper.Cube();
+    }
+    internal Cube(InfoCube cubeInfo) 
     {
         CubeInfo = cubeInfo;
         _primitiveInfo = cubeInfo;

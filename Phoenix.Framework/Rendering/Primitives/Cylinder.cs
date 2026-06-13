@@ -2,13 +2,21 @@ using Phoenix.Framework.Rendering.Geometry.Vertices;
 using Silk.NET.OpenGL;
 using System.Numerics;
 
-namespace Phoenix.Framework.Rendering.Gizmos.Geometries.Primitives;
+namespace Phoenix.Framework.Rendering.Primitives;
 
 public class Cylinder : Primitive
 {
     public InfoCylinder CylinderInfo;
 
-    public Cylinder(InfoCylinder cylinderInfo)
+    public static Cylinder Create(InfoCylinder cylinderInfo)
+    {
+        return PrimitiveHelper.Cylinder(cylinderInfo);
+    }
+    public static Cylinder Create()
+    {
+        return PrimitiveHelper.Cylinder();
+    }
+    internal Cylinder(InfoCylinder cylinderInfo)
     {
         CylinderInfo = cylinderInfo;
         _primitiveInfo = cylinderInfo;

@@ -2,13 +2,21 @@ using Phoenix.Framework.Rendering.Geometry.Vertices;
 using Silk.NET.OpenGL;
 using System.Numerics;
 
-namespace Phoenix.Framework.Rendering.Gizmos.Geometries.Primitives;
+namespace Phoenix.Framework.Rendering.Primitives;
 
 public class Pyramid : Primitive
 {
     public InfoPyramid PyramidInfo;
 
-    public Pyramid(InfoPyramid pyramidInfo)
+    public static Pyramid Create(InfoPyramid infoPyramid)
+    {
+        return PrimitiveHelper.Pyramid(infoPyramid);
+    }
+    public static Pyramid Create()
+    {
+        return PrimitiveHelper.Pyramid();
+    }
+    internal Pyramid(InfoPyramid pyramidInfo)
     {
         PyramidInfo = pyramidInfo;
         _primitiveInfo = pyramidInfo;

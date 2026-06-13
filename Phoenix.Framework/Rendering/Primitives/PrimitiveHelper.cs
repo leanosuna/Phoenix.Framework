@@ -5,25 +5,18 @@ using Silk.NET.GLFW;
 using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 
-namespace Phoenix.Framework.Rendering.Gizmos.Geometries.Primitives;
+namespace Phoenix.Framework.Rendering.Primitives;
 
-public static class PrimitiveHelper
+internal static class PrimitiveHelper
 {
-    private static GL GL;
-
     private static Dictionary<InfoCube, Cube> _primitivesCube = new();
     private static Dictionary<InfoSphere, Sphere> _primitivesSphere = new();
     private static Dictionary<InfoPlane, Plane> _primitivesPlane = new();
     private static Dictionary<InfoCylinder, Cylinder> _primitivesCylinder = new();
     private static Dictionary<InfoPyramid, Pyramid> _primitivesPyramid = new();
     private static Dictionary<InfoFrustum, Frustum> _primitivesFrustum = new();
-    internal static void Init(GL gl)
-    {
-        GL = gl;
-    }
 
-
-    public static Cube Cube(InfoCube info)
+    internal static Cube Cube(InfoCube info)
     {
         if(!_primitivesCube.TryGetValue(info, out var cube))
         {
@@ -34,7 +27,7 @@ public static class PrimitiveHelper
         return cube;
     }
 
-    public static Cube Cube()
+    internal static Cube Cube()
     {
         return Cube(new InfoCube{
             MeshPrimitiveType = PrimitiveType.Triangles,
@@ -43,7 +36,7 @@ public static class PrimitiveHelper
             }); 
     }
 
-    public static Sphere Sphere(InfoSphere info)
+    internal static Sphere Sphere(InfoSphere info)
     {
         if(!_primitivesSphere.TryGetValue(info, out var sphere))
         {
@@ -54,7 +47,7 @@ public static class PrimitiveHelper
         return sphere;
     }
 
-    public static Sphere Sphere()
+    internal static Sphere Sphere()
     {
         return Sphere(new InfoSphere{
             SubDivisions = 16,
@@ -64,7 +57,7 @@ public static class PrimitiveHelper
             }); 
     }
 
-    public static Plane Plane(InfoPlane info)
+    internal static Plane Plane(InfoPlane info)
     {
         if(!_primitivesPlane.TryGetValue(info, out var plane))
         {
@@ -75,7 +68,7 @@ public static class PrimitiveHelper
         return plane;
     }
 
-    public static Plane Plane()
+    internal static Plane Plane()
     {
         return Plane(new InfoPlane{
             MeshPrimitiveType = PrimitiveType.Triangles,
@@ -84,7 +77,7 @@ public static class PrimitiveHelper
             }); 
     }
 
-    public static Cylinder Cylinder(InfoCylinder info)
+    internal static Cylinder Cylinder(InfoCylinder info)
     {
         if(!_primitivesCylinder.TryGetValue(info, out var cylinder))
         {
@@ -95,7 +88,7 @@ public static class PrimitiveHelper
         return cylinder;
     }
 
-    public static Cylinder Cylinder()
+    internal static Cylinder Cylinder()
     {
         return Cylinder(new InfoCylinder{
             SubDivisions = 16,
@@ -105,7 +98,7 @@ public static class PrimitiveHelper
             }); 
     }
 
-    public static Pyramid Pyramid(InfoPyramid info)
+    internal static Pyramid Pyramid(InfoPyramid info)
     {
         if(!_primitivesPyramid.TryGetValue(info, out var pyramid))
         {
@@ -116,7 +109,7 @@ public static class PrimitiveHelper
         return pyramid;
     }
 
-    public static Pyramid Pyramid()
+    internal static Pyramid Pyramid()
     {
         return Pyramid(new InfoPyramid{
             MeshPrimitiveType = PrimitiveType.Triangles,
@@ -125,7 +118,7 @@ public static class PrimitiveHelper
             }); 
     }
 
-    public static Frustum Frustum(InfoFrustum info)
+    internal static Frustum Frustum(InfoFrustum info)
     {
         if(!_primitivesFrustum.TryGetValue(info, out var frustum))
         {
@@ -136,7 +129,7 @@ public static class PrimitiveHelper
         return frustum;
     }
 
-    public static Frustum Frustum()
+    internal static Frustum Frustum()
     {
         return Frustum(new InfoFrustum{
             NearWidth = 1.0f,

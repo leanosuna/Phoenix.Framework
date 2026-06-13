@@ -2,13 +2,20 @@ using Phoenix.Framework.Rendering.Geometry.Vertices;
 using Silk.NET.OpenGL;
 using System.Numerics;
 
-namespace Phoenix.Framework.Rendering.Gizmos.Geometries.Primitives;
+namespace Phoenix.Framework.Rendering.Primitives;
 
 public class Frustum : Primitive
 {
     public InfoFrustum FrustumInfo;
-
-    public Frustum(InfoFrustum frustumInfo)
+    public static Frustum Create(InfoFrustum frustumInfo)
+    {
+        return PrimitiveHelper.Frustum(frustumInfo);
+    }
+    public static Frustum Create()
+    {
+        return PrimitiveHelper.Frustum();
+    }
+    internal Frustum(InfoFrustum frustumInfo)
     {
         FrustumInfo = frustumInfo;
         _primitiveInfo = frustumInfo;
