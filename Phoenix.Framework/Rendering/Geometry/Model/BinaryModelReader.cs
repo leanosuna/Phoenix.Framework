@@ -9,7 +9,7 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
 {
     internal static class BinaryModelReader
     {
-        public static Model Load(GL gl, string path)
+        public static Model Load(GL gl, string path, bool saveVertexData)
         {
             using var fs = File.OpenRead(path);
             using var br = new BinaryReader(fs);
@@ -33,7 +33,11 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
                     var meshName = br.ReadString();
 
                     var index = br.ReadInt32();
-                    var transform = br.ReadStruct<Matrix4x4>();
+
+                    var preTransformed = br.ReadBoolean();
+
+                    var transform = preTransformed? Matrix4x4.Identity : br.ReadStruct<Matrix4x4>();
+                                        
                     var indicesLength = br.ReadInt32();
                     var indices = br.ReadArray<uint>(indicesLength);
                     var verticesLength = br.ReadInt32();
@@ -57,7 +61,7 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
 
                     var tv = vertices[0];
                     
-                    meshes.Add(new ModelMesh(gl, meshName, vertices, indices, transform, isAnimated, tangents));
+                    meshes.Add(new ModelMesh(gl, meshName, vertices, indices, transform, isAnimated, tangents, saveVertexData));
                 }
 
                 parts.Add(new ModelPart(partName, meshes));

@@ -15,5 +15,8 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
             Name = name;
             Meshes = meshes;
         }
+
+        public T[][] GetVertexData<T>() where T : unmanaged 
+            => Meshes.Select(m => m.GetVertexData<T>()).ToArray();
     }
 }

@@ -10,7 +10,7 @@ public abstract class PrimitiveInfo
     public bool Normals = false;
     public bool Tangents = false;
     public bool Bitangents = false;
-    
+    public bool SaveVertices = false;
     public PrimitiveInfo()
     {
         

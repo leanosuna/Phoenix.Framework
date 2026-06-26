@@ -30,12 +30,12 @@ namespace Phoenix.Framework.AssetImport
             ContentBinBaseDirectory = contentPath+"ContentBin/";
         }
         
-        public static Model LoadModel(string name)
+        public static Model LoadModel(string name, bool saveVertexData = true)
         {
             var absolutePath = AssetAbsolutePath(name);
             if (!_loadedModels.TryGetValue(absolutePath, out var model))
             {
-                model = BinaryModelReader.Load(GL, absolutePath);
+                model = BinaryModelReader.Load(GL, absolutePath, saveVertexData);
                 _loadedModels[absolutePath] = model;
             }
 
