@@ -4,6 +4,7 @@
 ## Get latest from `dotnet new gitignore`
 
 SKILLS.md
+AGENTS.md
 
 # dotenv files
 .env
