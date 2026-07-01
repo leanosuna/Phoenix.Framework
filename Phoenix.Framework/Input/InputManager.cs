@@ -7,9 +7,9 @@ namespace Phoenix.Framework.Input
     {
         private PhoenixGame _game;
         private IInputContext _input;
-        private IKeyboard _keyboard = default!;
-        private IMouse _mouse;
-        private Vector2 _lastMousePosition;
+        private List<IKeyboard> _keyboards = new List<IKeyboard>();
+        private List<IMouse> _mice = new List<IMouse>();
+        private Vector2[] _lastMousePositions = Array.Empty<Vector2>();
 
         public float MouseSensitivity = .001f;
         public Vector2 MouseDelta = Vector2.Zero;
@@ -19,20 +19,22 @@ namespace Phoenix.Framework.Input
             _game = game;
             _input = _game.Window.CreateInput();
 
-            //TODO: handle all mice/keyboard inputs
-            _keyboard = _input.Keyboards.FirstOrDefault()!;
-            //for (int i = 0; i < input.Mice.Count; i++)
-            //{
-            //    input.Mice[i].Cursor.CursorMode = CursorMode.Raw;
-            //    input.Mice[i].MouseMove += OnMouseMove;
-            //    input.Mice[i].Scroll += OnMouseWheel;
-            //}
+            _keyboards = _input.Keyboards.ToList();
+            _mice = _input.Mice.ToList();
 
-            _mouse = _input.Mice.FirstOrDefault()!;
-            _mouse.Cursor.CursorMode = CursorMode.Raw;
-            _mouse.Position = (Vector2)game.Window.Position + (Vector2)game.Window.Size / 2;
+            for (int i = 0; i < _mice.Count; i++)
+            {
+                _mice[i].Cursor.CursorMode = CursorMode.Raw;
+                _mice[i].Scroll += OnMouseWheel;
+            }
 
-            _lastMousePosition = _mouse.Position;
+            _lastMousePositions = new Vector2[_mice.Count];
+            for (int i = 0; i < _mice.Count; i++)
+            {
+                _mice[i].Position = (Vector2)game.Window.Position + (Vector2)game.Window.Size / 2;
+                _lastMousePositions[i] = _mice[i].Position;
+            }
+
             MouseDelta = Vector2.Zero;
 
         }
@@ -41,18 +43,18 @@ namespace Phoenix.Framework.Input
 
         public void SetMouseMode(CursorMode mode)
         {
-            for (int i = 0; i < _input.Mice.Count; i++)
+            for (int i = 0; i < _mice.Count; i++)
             {
-                _input.Mice[i].Position = (Vector2)_game.Window.Size / 2;
-                _input.Mice[i].Cursor.CursorMode = mode;
+                _mice[i].Position = (Vector2)_game.Window.Size / 2;
+                _lastMousePositions[i] = _mice[i].Position;
+                _mice[i].Cursor.CursorMode = mode;
 
             }
         }
         public void ToggleMouseMode()
         {
-            var m = _mouse.Cursor.CursorMode == CursorMode.Normal ? CursorMode.Raw : CursorMode.Normal;
-            //Console.WriteLine($"Mouse mode: {m}");
-            SetMouseMode(m);
+            var mode = _mice.Count > 0 && _mice[0].Cursor.CursorMode == CursorMode.Normal ? CursorMode.Raw : CursorMode.Normal;
+            SetMouseMode(mode);
         }
 
         public void OnMouseWheel(IMouse mouse, ScrollWheel scrollWheel)
@@ -61,23 +63,30 @@ namespace Phoenix.Framework.Input
         }
 
         static List<Key> keysDown = new List<Key>();
+        static List<MouseButton> buttonsDown = new List<MouseButton>();
         public void Update()
         {
-            keysDown.RemoveAll(k => !_keyboard.IsKeyPressed(k));
+            keysDown.RemoveAll(k => !_keyboards.Any(kb => kb.IsKeyPressed(k)));
 
-            MouseDelta.X = (float)(_mouse.Position.X - _lastMousePosition.X) * MouseSensitivity;
-            MouseDelta.Y = (float)(_mouse.Position.Y - _lastMousePosition.Y) * MouseSensitivity;
-            _lastMousePosition = _mouse.Position;
+            MouseDelta = Vector2.Zero;
+            for (int i = 0; i < _mice.Count; i++)
+            {
+                MouseDelta.X += (float)(_mice[i].Position.X - _lastMousePositions[i].X) * MouseSensitivity;
+                MouseDelta.Y += (float)(_mice[i].Position.Y - _lastMousePositions[i].Y) * MouseSensitivity;
+                _lastMousePositions[i] = _mice[i].Position;
+            }
+
+            buttonsDown.RemoveAll(b => !_mice.Any(m => m.IsButtonPressed(b)));
 
         }
         public bool KeyDown(Key key)
         {
-            return _keyboard.IsKeyPressed(key);
+            return _keyboards.Any(kb => kb.IsKeyPressed(key));
         }
 
         public bool KeyDownOnce(Key key)
         {
-            if (_keyboard.IsKeyPressed(key) && !keysDown.Contains(key))
+            if (_keyboards.Any(kb => kb.IsKeyPressed(key)) && !keysDown.Contains(key))
             {
                 keysDown.Add(key);
                 return true;
@@ -85,11 +94,31 @@ namespace Phoenix.Framework.Input
             return false;
         }
 
+        public bool MouseDown(MouseButton button)
+        {
+            return _mice.Any(m => m.IsButtonPressed(button));
+        }
+
+        public bool MouseDownOnce(MouseButton button)
+        {
+            if (_mice.Any(m => m.IsButtonPressed(button)) && !buttonsDown.Contains(button))
+            {
+                buttonsDown.Add(button);
+                return true;
+            }
+            return false;
+        }
+
+        public bool MouseLeftDown() => MouseDown(MouseButton.Left);
+        public bool MouseRightDown() => MouseDown(MouseButton.Right);
+        public bool MouseLeftDownOnce() => MouseDownOnce(MouseButton.Left);
+        public bool MouseRightDownOnce() => MouseDownOnce(MouseButton.Right);
+
         CursorMode _beforeTemp;
         
         internal void SetTemporaryMouseMode(CursorMode mode)
         {
-            _beforeTemp = _input.Mice[0].Cursor.CursorMode;
+            _beforeTemp = _mice.Count > 0 ? _mice[0].Cursor.CursorMode : CursorMode.Normal;
 
             SetMouseMode(mode);
         }
