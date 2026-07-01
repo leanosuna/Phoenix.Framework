@@ -16,18 +16,12 @@ namespace Phoenix.Framework.Rendering
 {
     public class Graphics
     {
+        public Metrics Metrics { get; } = new Metrics();
+
         private PhoenixGame _game;
         private GL GL;
         private IWindow _window;
         private RTManager _rtManager;
-
-        public double Time { get; internal set; } = 0;
-        public double FrameTime { get; internal set; } = 0;
-        public double FT_SAMPLE { get; internal set; } = 0;
-        public double FT_SAMPLE_RATE { get; set; } = 0.3;
-        public double FPS { get; internal set; } = 0;
-        public double FPS_SAMPLE { get; internal set; } = 0;
-        public double FPS_SAMPLE_RATE { get; set; } = 0.3;
 
         public Key RenderHaltKey { get; set; } = Key.F11;
 

@@ -20,7 +20,7 @@ namespace Phoenix.Framework.Rendering.GUI
             _game = game;
             GL = game.GL;
 
-            var inputContext = game.InputManager.GetInputContext();
+            var inputContext = game.Input.GetContext();
             _controller = new ImGuiController(GL, game.Window, inputContext);
 
             LoadDefaultFont();

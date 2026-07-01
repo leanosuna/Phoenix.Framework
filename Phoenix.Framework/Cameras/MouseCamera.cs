@@ -26,7 +26,7 @@ namespace Phoenix.Framework.Cameras
             if (!MouseAim)
                 return;
 
-            var mouseDelta = _game.InputManager.MouseDelta;
+            var mouseDelta = _game.Input.MouseDelta;
             if (mouseDelta != Vector2.Zero)
             {
                 Yaw += mouseDelta.X;

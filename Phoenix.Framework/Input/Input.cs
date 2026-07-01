@@ -1,9 +1,9 @@
 ﻿using Silk.NET.Input;
 using System.Numerics;
 
-namespace Phoenix.Framework.Input
+namespace Phoenix.Framework.Inputs
 {
-    public class InputManager
+    public class Input
     {
         private PhoenixGame _game;
         private IInputContext _input;
@@ -14,7 +14,7 @@ namespace Phoenix.Framework.Input
         public float MouseSensitivity = .001f;
         public Vector2 MouseDelta = Vector2.Zero;
         public float MouseWheelValue = 0;
-        public InputManager(PhoenixGame game)
+        public Input(PhoenixGame game)
         {
             _game = game;
             _input = _game.Window.CreateInput();
@@ -39,7 +39,7 @@ namespace Phoenix.Framework.Input
 
         }
 
-        public IInputContext GetInputContext() { return _input; }
+        public IInputContext GetContext() { return _input; }
 
         public void SetMouseMode(CursorMode mode)
         {
@@ -62,11 +62,11 @@ namespace Phoenix.Framework.Input
             MouseWheelValue -= scrollWheel.Y;
         }
 
-        static List<Key> keysDown = new List<Key>();
-        static List<MouseButton> buttonsDown = new List<MouseButton>();
-        public void Update()
+        private List<Key> _keysDown = new List<Key>();
+        private List<MouseButton> _buttonsDown = new List<MouseButton>();
+        internal void Update()
         {
-            keysDown.RemoveAll(k => !_keyboards.Any(kb => kb.IsKeyPressed(k)));
+            _keysDown.RemoveAll(k => !_keyboards.Any(kb => kb.IsKeyPressed(k)));
 
             MouseDelta = Vector2.Zero;
             for (int i = 0; i < _mice.Count; i++)
@@ -76,7 +76,7 @@ namespace Phoenix.Framework.Input
                 _lastMousePositions[i] = _mice[i].Position;
             }
 
-            buttonsDown.RemoveAll(b => !_mice.Any(m => m.IsButtonPressed(b)));
+            _buttonsDown.RemoveAll(b => !_mice.Any(m => m.IsButtonPressed(b)));
 
         }
         public bool KeyDown(Key key)
@@ -86,9 +86,9 @@ namespace Phoenix.Framework.Input
 
         public bool KeyDownOnce(Key key)
         {
-            if (_keyboards.Any(kb => kb.IsKeyPressed(key)) && !keysDown.Contains(key))
+            if (_keyboards.Any(kb => kb.IsKeyPressed(key)) && !_keysDown.Contains(key))
             {
-                keysDown.Add(key);
+                _keysDown.Add(key);
                 return true;
             }
             return false;
@@ -101,9 +101,9 @@ namespace Phoenix.Framework.Input
 
         public bool MouseDownOnce(MouseButton button)
         {
-            if (_mice.Any(m => m.IsButtonPressed(button)) && !buttonsDown.Contains(button))
+            if (_mice.Any(m => m.IsButtonPressed(button)) && !_buttonsDown.Contains(button))
             {
-                buttonsDown.Add(button);
+                _buttonsDown.Add(button);
                 return true;
             }
             return false;
@@ -114,7 +114,7 @@ namespace Phoenix.Framework.Input
         public bool MouseLeftDownOnce() => MouseDownOnce(MouseButton.Left);
         public bool MouseRightDownOnce() => MouseDownOnce(MouseButton.Right);
 
-        CursorMode _beforeTemp;
+        private CursorMode _beforeTemp;
         
         internal void SetTemporaryMouseMode(CursorMode mode)
         {

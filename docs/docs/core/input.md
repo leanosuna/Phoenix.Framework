@@ -1,81 +1,90 @@
 # Input
 
-The `InputManager` handles keyboard and mouse input via Silk.NET.
+Namespace: `Phoenix.Framework.Inputs`
 
-## Access
+The `Input` class handles keyboard and mouse input via Silk.NET. Supports any number of connected keyboards and mice. Exposed as `PhoenixGame.Input`.
 
-`InputManager` is a read-only property on `PhoenixGame`:
+## Properties
+
+| Name | Type | Description |
+|---|---|---|
+| `MouseSensitivity` | `float` | Mouse delta multiplier (default `0.001f`) |
+| `MouseDelta` | `Vector2` | Accumulated mouse movement this frame, multiplied by sensitivity |
+| `MouseWheelValue` | `float` | Accumulated scroll wheel delta this frame (reset after read) |
+
+## Methods
+
+### Keyboard
+
+| Method | Return | Description |
+|---|---|---|
+| `KeyDown(Key key)` | `bool` | `true` while the key is held |
+| `KeyDownOnce(Key key)` | `bool` | `true` only on the frame the key is first pressed |
 
 ```csharp
-var input = InputManager;  // or: this.InputManager
+if (Input.KeyDown(Key.W))
+    MoveForward(speed * (float)dt);
+
+if (Input.KeyDownOnce(Key.E))
+    Interact();
 ```
 
-## Keyboard
+### Mouse
 
-### Key State Queries
+| Method | Return | Description |
+|---|---|---|
+| `MouseDown(MouseButton button)` | `bool` | `true` while the button is held |
+| `MouseDownOnce(MouseButton button)` | `bool` | `true` only on the frame the button is first pressed |
+| `MouseLeftDown()` | `bool` | Shorthand for `MouseDown(Left)` |
+| `MouseRightDown()` | `bool` | Shorthand for `MouseDown(Right)` |
+| `MouseLeftDownOnce()` | `bool` | Shorthand for `MouseDownOnce(Left)` |
+| `MouseRightDownOnce()` | `bool` | Shorthand for `MouseDownOnce(Right)` |
 
 ```csharp
-// Is the key currently held down this frame?
-if (InputManager.KeyDown(Key.W))
-{
-    // Move forward
-}
-
-// Fires only the first frame a key is down, 
-// Resets when releasing it.
-if (InputManager.KeyDownOnce(Key.E))
-{
-    // Toggle something...
-    InputManager.ToggleMouseMode();
-}
+if (Input.MouseLeftDownOnce())
+    Fire();
 ```
 
-## Mouse
+### Cursor
+
+| Method | Description |
+|---|---|
+| `SetMouseMode(CursorMode mode)` | Lock (`Raw`) or unlock (`Normal`) the cursor |
+| `ToggleMouseMode()` | Toggle between `Raw` and `Normal` cursor modes |
+
+```csharp
+Input.SetMouseMode(CursorMode.Raw);
+Input.ToggleMouseMode();
+```
 
 ### Mouse Delta
 
 Accumulated mouse movement this frame, multiplied by sensitivity:
 
 ```csharp
-Vector2 delta = InputManager.MouseDelta;
-// delta.X = horizontal movement
-// delta.Y = vertical movement
+Vector2 delta = Input.MouseDelta;
+// delta.X = horizontal, delta.Y = vertical
 ```
 
 ### Mouse Wheel
 
 ```csharp
-protected override void Update(double dt)
-{
-    float wheel = InputManager.MouseWheelValue;
-    if (wheel != 0)
-    {
-        // Zoom in/out
-        Camera.FOV -= wheel * 0.05f;
-    }
-}
-```
-
-### Mouse Mode
-
-Lock the cursor to the window (raw input) or allow free movement:
-
-```csharp
-// Lock cursor (raw mouse input)
-InputManager.SetMouseMode(CursorMode.Raw);
-
-// Unlock cursor (normal mode)
-InputManager.SetMouseMode(CursorMode.Normal);
-
-// Toggle between the two
-InputManager.ToggleMouseMode();
+float wheel = Input.MouseWheelValue;
+if (wheel != 0)
+    Camera.FOV -= wheel * 0.05f;
 ```
 
 ### Mouse Sensitivity
 
 ```csharp
-InputManager.MouseSensitivity = 0.002f;  // Default: 0.001f
+Input.MouseSensitivity = 0.002f;
 ```
+
+### Context
+
+| Method | Return | Description |
+|---|---|---|
+| `GetContext()` | `IInputContext` | Access the underlying Silk.NET input context |
 
 ## Complete Example
 
@@ -83,37 +92,28 @@ InputManager.MouseSensitivity = 0.002f;  // Default: 0.001f
 protected override void Update(double dt)
 {
     // Toggle mouse lock
-    if (InputManager.KeyDownOnce(Key.Escape))
-        InputManager.ToggleMouseMode();
+    if (Input.KeyDownOnce(Key.Escape))
+        Input.ToggleMouseMode();
 
     // Camera rotation from mouse delta
-    if (InputManager.MouseAim)
-    {
-        Camera.Yaw += InputManager.MouseDelta.X * InputManager.MouseSensitivity;
-        Camera.Pitch += InputManager.MouseDelta.Y * InputManager.MouseSensitivity;
-    }
+    var delta = Input.MouseDelta;
+    Camera.Yaw += delta.X;
+    Camera.Pitch += delta.Y;
 
     // Edge-detect interaction
-    if (InputManager.KeyDownOnce(Key.E))
-    {
-        InteractWithClosestObject();
-    }
+    if (Input.KeyDownOnce(Key.E))
+        Interact();
 
     // Continuous action
-    if (InputManager.KeyDown(Key.LeftShift))
-    {
-        MoveForward(15f * (float)dt);  // Sprint
-    }
+    if (Input.KeyDown(Key.LeftShift))
+        MoveForward(15f * (float)dt);
     else
-    {
-        MoveForward(5f * (float)dt);   // Walk
-    }
+        MoveForward(5f * (float)dt);
 
     // Mouse wheel zoom
-    if (InputManager.MouseWheelValue != 0)
-    {
-        Camera.FOV = MathHelper.Clamp(Camera.FOV + InputManager.MouseWheelValue, 0.1f, MathF.PI / 2f);
-    }
+    float scroll = Input.MouseWheelValue;
+    if (scroll != 0)
+        Camera.FOV = MathHelper.Clamp(Camera.FOV + scroll, 0.1f, MathF.PI / 2f);
 }
 ```
 
@@ -121,11 +121,12 @@ protected override void Update(double dt)
 
 - `KeyDown()` returns `true` for the frame a key is first pressed AND every frame it is held.
 - `KeyDownOnce()` returns `true` only on the frame the key is first pressed (edge detection).
-- `MouseDelta` is accumulated from the `OnMouseMove` event and reset each `Update()`.
+- `MouseDelta` is accumulated each frame and reset on `Update()`.
 - `MouseWheelValue` is reset each frame after being read.
-- `keysDown` list tracks which keys have been pressed / released each frame.
+- `MouseDownOnce()` tracks pressed buttons with an internal list, same edge-detect pattern as keys.
+- The constructor initializes all mice to `CursorMode.Raw` by default.
 
 ## See Also
 
-- [Camera](camera.md) — `FreeCamera` uses `InputManager.MouseDelta` for rotation
-- [Gizmos](../rendering/gizmos.md) — F11 toggles render halt via `InputManager`
+- [Camera](camera.md) — `FreeCamera` uses `Input.MouseDelta` for rotation
+- [Gizmos](../rendering/gizmos.md) — F11 toggles render halt via `Input`

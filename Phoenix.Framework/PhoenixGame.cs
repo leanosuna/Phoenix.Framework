@@ -1,6 +1,6 @@
 ﻿using Phoenix.Framework.AssetImport;
 using Phoenix.Framework.Cameras;
-using Phoenix.Framework.Input;
+using Phoenix.Framework.Inputs;
 using Phoenix.Framework.Maths;
 using Phoenix.Framework.Network;
 using Phoenix.Framework.Rendering;
@@ -30,7 +30,7 @@ namespace Phoenix.Framework
         public int WindowHeight => (int)WindowSize.Y;
         public int FramebufferWidth => (int)FramebufferSize.X;
         public int FramebufferHeight => (int)FramebufferSize.Y;
-        public InputManager InputManager { get; private set; } = default!;
+        public Input Input { get; private set; } = default!;
         public FullScreenQuad FullScreenQuad { get; private set; } = default!;
         public Gizmos Gizmos { get; private set; } = default!;
         public UI UI { get; private set; } = default!;
@@ -169,7 +169,7 @@ namespace Phoenix.Framework
             FramebufferSize = Window.FramebufferSize.ToNum();
             WindowSize = Window.Size.ToNum();
 
-            InputManager = new InputManager(this);
+            Input = new Input(this);
             UI = new UI(this);
             RTManager = new RTManager(this);
             _sceneRT = RTManager.BuildRT()
@@ -218,18 +218,18 @@ namespace Phoenix.Framework
                 _firstFrame = false;
                 return;
             }
-            Graphics.Time += deltaTime;
+            Graphics.Metrics.ProcessUpdate(deltaTime);
 
-            InputManager.Update();
-            if(InputManager.KeyDownOnce(Graphics.RenderHaltKey))
+            Input.Update();
+            if(Input.KeyDownOnce(Graphics.RenderHaltKey))
             {
                 if(!_renderingHalt)
                 {
-                    InputManager.SetTemporaryMouseMode(Silk.NET.Input.CursorMode.Normal);
+                    Input.SetTemporaryMouseMode(Silk.NET.Input.CursorMode.Normal);
                 }
                 else
                 {
-                    InputManager.RestoreMouseMode();
+                    Input.RestoreMouseMode();
                 }
                 _renderingHalt = !_renderingHalt;
 
@@ -253,7 +253,7 @@ namespace Phoenix.Framework
         {
             if (Camera is null)
                 return;
-            _commonUboData = new CommonUBO(Camera.View, Camera.Projection, (float)Graphics.Time, (float)dt);
+            _commonUboData = new CommonUBO(Camera.View, Camera.Projection, (float)Graphics.Metrics.Time, (float)dt);
             GL.BindBuffer(GLEnum.UniformBuffer, CommonUboHandle);
             fixed (void* d = & _commonUboData)
             {
@@ -271,28 +271,12 @@ namespace Phoenix.Framework
 
             UI.DrawCenteredText(str,new Vector2(WindowSize.X / 2, WindowSize.Y / 2), Vector4.One, 30);
         }
-        double _timerSamplerFPS = 0;
-        double _timerSamplerFT = 0;
+        
 
         private void InternalRender(double deltaTime)
         {
-            Graphics.FrameTime = deltaTime;
-
-            Graphics.FPS = 1.0 / deltaTime;
-            _timerSamplerFPS += deltaTime;
-            _timerSamplerFT += deltaTime;
-
-            if (_timerSamplerFPS >= Graphics.FPS_SAMPLE_RATE)
-            {
-                Graphics.FPS_SAMPLE = Graphics.FPS;
-                _timerSamplerFPS = 0;
-            }
-            if (_timerSamplerFT >= Graphics.FT_SAMPLE_RATE)
-            {
-                Graphics.FT_SAMPLE = Graphics.FrameTime;
-                _timerSamplerFT = 0;
-            }
-
+            Graphics.Metrics.ProcessRender(deltaTime);
+            
             if (!_delayedLoadDone)
             {
                 InitialLoadScreen();

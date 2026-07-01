@@ -69,12 +69,12 @@ namespace Phoenix.Framework.Cameras
 
             var dir = Vector3.Zero;
 
-            dir += Front * (_game.InputManager.KeyDown(_forward) ? 1 : 0);
-            dir -= Front * (_game.InputManager.KeyDown(_backward) ? 1 : 0);
-            dir -= Right * (_game.InputManager.KeyDown(_left) ? 1 : 0);
-            dir += Right * (_game.InputManager.KeyDown(_right) ? 1 : 0);
-            dir += Up * (_game.InputManager.KeyDown(_up) ? 1 : 0);
-            dir -= Up * (_game.InputManager.KeyDown(_down) ? 1 : 0);
+            dir += Front * (_game.Input.KeyDown(_forward) ? 1 : 0);
+            dir -= Front * (_game.Input.KeyDown(_backward) ? 1 : 0);
+            dir -= Right * (_game.Input.KeyDown(_left) ? 1 : 0);
+            dir += Right * (_game.Input.KeyDown(_right) ? 1 : 0);
+            dir += Up * (_game.Input.KeyDown(_up) ? 1 : 0);
+            dir -= Up * (_game.Input.KeyDown(_down) ? 1 : 0);
 
             if (dir != Vector3.Zero)
             {
@@ -82,7 +82,7 @@ namespace Phoenix.Framework.Cameras
 
                 var speed = MoveSpeed;
 
-                if (_game.InputManager.KeyDown(_speedModifierKey))
+                if (_game.Input.KeyDown(_speedModifierKey))
                     speed *= _speedModifier;
                 Position += dir * speed * (float)deltaTime;
 
@@ -97,22 +97,22 @@ namespace Phoenix.Framework.Cameras
                 return false;
             bool res = false;
 
-            if (_game.InputManager.KeyDown(_pitchUp))
+            if (_game.Input.KeyDown(_pitchUp))
             {
                 Pitch += _turnSpeed.Y * (float)deltaTime;
                 res = true;
             }
-            if (_game.InputManager.KeyDown(_pitchDown))
+            if (_game.Input.KeyDown(_pitchDown))
             {
                 Pitch -= _turnSpeed.Y * (float)deltaTime;
                 res = true;
             }
-            if (_game.InputManager.KeyDown(_yawRight))
+            if (_game.Input.KeyDown(_yawRight))
             {
                 Yaw += _turnSpeed.X * (float)deltaTime;
                 res = true;
             }
-            if (_game.InputManager.KeyDown(_yawLeft))
+            if (_game.Input.KeyDown(_yawLeft))
             {
                 Yaw -= _turnSpeed.X * (float)deltaTime;
                 res = true;
