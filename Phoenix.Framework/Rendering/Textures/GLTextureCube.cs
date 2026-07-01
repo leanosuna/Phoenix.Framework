@@ -101,10 +101,10 @@ namespace Phoenix.Framework.Rendering.Textures
 
         private void LoadParametersIntoGL()
         {
-            GL.TexParameter(TextureTarget.Texture2D, GLEnum.TextureWrapS, (int)GLEnum.ClampToEdge);
-            GL.TexParameter(TextureTarget.Texture2D, GLEnum.TextureWrapT, (int)GLEnum.ClampToEdge);
-            GL.TexParameter(TextureTarget.Texture2D, GLEnum.TextureMinFilter, (int)GLEnum.Linear);
-            GL.TexParameter(TextureTarget.Texture2D, GLEnum.TextureMagFilter, (int)GLEnum.Linear);
+            GL.TexParameter(TextureTarget.TextureCubeMap, GLEnum.TextureWrapS, (int)GLEnum.ClampToEdge);
+            GL.TexParameter(TextureTarget.TextureCubeMap, GLEnum.TextureWrapT, (int)GLEnum.ClampToEdge);
+            GL.TexParameter(TextureTarget.TextureCubeMap, GLEnum.TextureMinFilter, (int)GLEnum.Linear);
+            GL.TexParameter(TextureTarget.TextureCubeMap, GLEnum.TextureMagFilter, (int)GLEnum.Linear);
 
         }
     }

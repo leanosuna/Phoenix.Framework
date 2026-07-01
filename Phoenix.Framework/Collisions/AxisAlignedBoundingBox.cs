@@ -51,6 +51,8 @@ namespace Phoenix.Framework.Collisions
             Position = center;
             Min = Position - _halfSize;
             Max = Position + _halfSize;
+
+            _world = Matrix4x4.CreateScale(Size) * Matrix4x4.CreateTranslation(Position);
         }
 
 

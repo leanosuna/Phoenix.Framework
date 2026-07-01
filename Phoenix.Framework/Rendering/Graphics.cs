@@ -76,6 +76,7 @@ namespace Phoenix.Framework.Rendering
 
         #region GL CFG
         private (bool, GLEnum) _depth = default!;
+        public (bool Enabled, GLEnum Function) DepthTest => _depth;
         public void SetDepthTest(bool enable, GLEnum type = GLEnum.Lequal)
         {
             if (_depth == (enable, type))
@@ -95,6 +96,7 @@ namespace Phoenix.Framework.Rendering
             
         }
         private (bool, BlendingFactor, BlendingFactor) _blend = default!;
+        public (bool Enabled, BlendingFactor Source, BlendingFactor Destination) AlphaBlend => _blend;
         public void SetAlphaBlend(bool enable, BlendingFactor source = BlendingFactor.SrcAlpha, BlendingFactor destination = BlendingFactor.One)
         {
             if (_blend == (enable, source, destination))
@@ -112,6 +114,7 @@ namespace Phoenix.Framework.Rendering
             }
         }
         private (bool, GLEnum, bool) _cull = default!;
+        public (bool Enabled, GLEnum Face, bool FrontIsCcw) FaceCulling => _cull;
         public void SetFaceCulling(bool enable, GLEnum face = GLEnum.Back, bool frontIsCcw = true)
         {
             if (_cull == (enable, face, frontIsCcw))
@@ -128,6 +131,46 @@ namespace Phoenix.Framework.Rendering
             {
                 GL.Disable(GLEnum.CullFace);
             }
+        }
+        private TriangleFace _polygonFace = TriangleFace.FrontAndBack;
+        private PolygonMode _polygonMode = PolygonMode.Fill;
+        public (TriangleFace Face, PolygonMode Mode) PolygonModeState => (_polygonFace, _polygonMode);
+        public void SetPolygonMode(TriangleFace face = TriangleFace.FrontAndBack, PolygonMode mode = PolygonMode.Fill)
+        {
+            if ((_polygonFace, _polygonMode) == (face, mode))
+                return;
+            (_polygonFace, _polygonMode) = (face, mode);
+            GL.PolygonMode(face, mode);
+        }
+        private bool _depthWrite = true;
+        public bool DepthWrite => _depthWrite;
+        public void SetDepthWrite(bool enable)
+        {
+            if (_depthWrite == enable)
+                return;
+            _depthWrite = enable;
+            GL.DepthMask(enable);
+        }
+        private bool _colorWriteR = true;
+        private bool _colorWriteG = true;
+        private bool _colorWriteB = true;
+        private bool _colorWriteA = true;
+        public (bool R, bool G, bool B, bool A) ColorWrite => (_colorWriteR, _colorWriteG, _colorWriteB, _colorWriteA);
+        public void SetColorWrite(bool r, bool g, bool b, bool a)
+        {
+            if ((_colorWriteR, _colorWriteG, _colorWriteB, _colorWriteA) == (r, g, b, a))
+                return;
+            (_colorWriteR, _colorWriteG, _colorWriteB, _colorWriteA) = (r, g, b, a);
+            GL.ColorMask(r, g, b, a);
+        }
+        private uint _stencilWriteMask = 0xFF;
+        public uint StencilWriteMask => _stencilWriteMask;
+        public void SetStencilWriteMask(uint mask)
+        {
+            if (_stencilWriteMask == mask)
+                return;
+            _stencilWriteMask = mask;
+            GL.StencilMask(mask);
         }
         #endregion
 

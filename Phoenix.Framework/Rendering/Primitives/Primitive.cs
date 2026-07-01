@@ -10,7 +10,7 @@ namespace Phoenix.Framework.Rendering.Primitives;
 
 public abstract class Primitive
 {
-    protected Mesh _mesh;
+    private Mesh<uint> _mesh;
     protected static GL GL;
     protected PrimitiveInfo _primitiveInfo;
     public static void SetGL(GL gl)
@@ -20,8 +20,10 @@ public abstract class Primitive
     public void Draw()
     {
         _mesh.Draw();
-    }    
+    }
 
+    public T[] GetVertexData<T>() where T : unmanaged => _mesh.GetVertexData<T>();
+    public uint[] GetIndexData() => _mesh.GetIndexData();
     protected void BuildMesh()
     {
         var vdd = new VertexDeclarationBuilder().AddVertex3f();
@@ -38,12 +40,7 @@ public abstract class Primitive
             uint[] lineIndices = [];
             VertexIndexBufferLines(ref lineVbb, ref lineIndices);
             var lineVertices = lineVbb.Build();
-            _mesh = new MeshBuilder<uint>(GL)
-                .SetDrawType(PrimitiveType.Lines)
-                .SetVertexDeclaration(lineVd)
-                .SetIndices(lineIndices)
-                .SetVertexData(lineVertices)
-                .Build();
+            _mesh = new Mesh<uint>(GL, PrimitiveType.Lines, lineVd, lineIndices, lineVertices);
             return;
         }
 
@@ -81,12 +78,7 @@ public abstract class Primitive
         }
 
         var vertices = vbb.Build();
-        _mesh = new MeshBuilder<uint>(GL)
-            .SetDrawType(_primitiveInfo.MeshPrimitiveType)
-            .SetVertexDeclaration(vd)
-            .SetIndices(indices)
-            .SetVertexData(vertices)
-            .Build();
+        _mesh = new Mesh<uint>(GL, _primitiveInfo.MeshPrimitiveType, vd, indices, vertices, _primitiveInfo.SaveVertices);
     }
 
     protected abstract void VertexIndexBufferPos(ref VertexBufferBuilder vbb, ref uint[] indices);
