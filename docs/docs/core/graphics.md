@@ -32,7 +32,7 @@ Performance counters are grouped in the `Metrics` property.
 | `FPS` | `double` | Instantaneous frames per second |
 | `FPS_SAMPLE` | `int` | Smoothed FPS sample |
 | `FPS_SAMPLE_RATE` | `double` | FPS sample rate (default `0.3`) |
-| `UPD_SAMPLE` | `int` | Smoothed update delta sample (ms) |
+| `UPD_SAMPLE` | `int` | Smoothed updates per second sample |
 | `UPD_SAMPLE_RATE` | `double` | Update sample rate (default `0.3`) |
 
 

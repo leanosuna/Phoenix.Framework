@@ -31,7 +31,7 @@ namespace Phoenix.Framework.Rendering.GUI
         public void LoadDefaultFont()
         {
             List<int> sizes = new List<int>();
-            for (int i = 10; i <= 100; i += 5)
+            for (int i = 10; i <= 100; i += 1)
                 sizes.Add(i);
 
             LoadFontTTF(EmbeddedHelper.ExtractPath("CascadiaMono.ttf", "Files.Fonts"), sizes.ToArray());

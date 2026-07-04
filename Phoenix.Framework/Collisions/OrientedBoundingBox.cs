@@ -7,19 +7,8 @@ namespace Phoenix.Framework.Collisions
     /// </summary>
     public class OrientedBoundingBox
     {
-        /// <summary>
-        ///     Center.
-        /// </summary>
         public Vector3 Position { get; set; }
-
-        /// <summary>
-        ///     Orientation 
-        /// </summary>
         public Matrix4x4 Orientation { get; set; }
-
-        /// <summary>
-        ///     Extents
-        /// </summary>
         public Vector3 Size { get; set; }
 
         internal Matrix4x4 _world;
@@ -39,7 +28,7 @@ namespace Phoenix.Framework.Collisions
         public OrientedBoundingBox(Vector3 position, Vector3 size)
         {
             Position = position;
-            Size = size * 0.5f;
+            Size = size;
             Orientation = Matrix4x4.Identity;
             CalculateWorld();
         }
@@ -68,7 +57,7 @@ namespace Phoenix.Framework.Collisions
 
         private void CalculateWorld()
         {
-            _world = Matrix4x4.CreateScale(Size * 2) * Orientation * Matrix4x4.CreateTranslation(Position);
+            _world = Matrix4x4.CreateScale(Size) * Orientation * Matrix4x4.CreateTranslation(Position);
         }
 
 
@@ -131,8 +120,8 @@ namespace Phoenix.Framework.Collisions
             float rb;
             var R = new float[3, 3];
             var AbsR = new float[3, 3];
-            var ae = ToArray(Size);
-            var be = ToArray(box.Size);
+            var ae = ToArray(Size * 0.5f);
+            var be = ToArray(box.Size * 0.5f);
 
             // Compute rotation matrix expressing the other box in this box coordinate frame
 
@@ -252,8 +241,7 @@ namespace Phoenix.Framework.Collisions
 
             var rayInOBBSpace = new Ray(rayOriginInOBBSpace, Vector3.Normalize(rayDestinationInOBBSpace - rayOriginInOBBSpace));
 
-            // Create an AABB that encloses OBB
-            var enclosingBox = new AxisAlignedBoundingBox(-Size, Size);
+            var enclosingBox = new AxisAlignedBoundingBox(-Size * 0.5f, Size * 0.5f);
 
             // Perform Ray-AABB intersection
             var testResult = enclosingBox.Intersects(rayInOBBSpace);
@@ -273,8 +261,7 @@ namespace Phoenix.Framework.Collisions
             // Transform sphere to OBB-Space
             var obbSpaceSphere = new BoundingSphere(ToOBBSpace(sphere.Center), sphere.Radius);
 
-            // Create AABB enclosing the OBB
-            var aabb = new AxisAlignedBoundingBox(-Size, Size);
+            var aabb = new AxisAlignedBoundingBox(-Size * 0.5f, Size * 0.5f);
 
             return aabb.Intersects(obbSpaceSphere);
         }
@@ -291,10 +278,10 @@ namespace Phoenix.Framework.Collisions
             // Maximum extent in direction of plane normal 
             var normal = Vector3.Transform(plane.Normal, Orientation);
 
-            // Maximum extent in direction of plane normal 
-            var r = MathF.Abs(Size.X * normal.X)
-                + MathF.Abs(Size.Y * normal.Y)
-                + MathF.Abs(Size.Z * normal.Z);
+            var half = Size * 0.5f;
+            var r = MathF.Abs(half.X * normal.X)
+                + MathF.Abs(half.Y * normal.Y)
+                + MathF.Abs(half.Z * normal.Z);
 
             // signed distance between box center and plane
             var d = Vector3.Dot(plane.Normal, Position) + plane.D;
