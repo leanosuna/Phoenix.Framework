@@ -324,5 +324,38 @@ namespace Phoenix.Framework.Collisions
             depth = 0;
             return false;
         }
+        public static bool RayVsVolume(Ray ray, SerializableVolume vol,
+            out float hitFraction, out Vector3 hitPoint, out Vector3 hitNormal)
+        {
+            switch (vol)
+            {
+                case SerializableAABB aabb:
+                {
+                    AxisAlignedBoundingBox box = aabb;
+                    return RayCasts.RayVsAABB(ray, box.Min, box.Max, out hitFraction, out hitPoint, out hitNormal);
+                }
+                case SerializableOBB obb:
+                {
+                    OrientedBoundingBox box = obb;
+                    return RayCasts.RayVsOBB(ray, box.Position, box.Size, box.Orientation, out hitFraction, out hitPoint, out hitNormal);
+                }
+                case SerializableCylinder cyl:
+                    return RayCasts.RayVsCylinder(ray, cyl.Position, cyl.Radius, cyl.Height * 0.5f, out hitFraction, out hitPoint, out hitNormal);
+                case SerializableSphere sphere:
+                {
+                    BoundingSphere s = sphere;
+                    return RayCasts.RayVsSphere(ray, s.Center, s.Radius, out hitFraction, out hitPoint, out hitNormal);
+                }
+                case SerializableCapsule cap:
+                {
+                    Capsule c = cap;
+                    return RayCasts.RayVsCapsule(ray, c.PointA, c.PointB, c.Radius, out hitFraction, out hitPoint, out hitNormal);
+                }
+            }
+            hitFraction = 0;
+            hitPoint = Vector3.Zero;
+            hitNormal = Vector3.Zero;
+            return false;
+        }
     }
 }

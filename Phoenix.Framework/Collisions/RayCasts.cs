@@ -224,11 +224,69 @@ namespace Phoenix.Framework.Collisions
             return true;
         }
 
-        public static float? RayVsAABB(Ray ray, Vector3 aabbMin, Vector3 aabbMax)
+        public static bool RayVsCylinder(Ray ray, Vector3 center, float radius, float halfHeight,
+            out float hitFraction, out Vector3 hitPoint, out Vector3 hitNormal)
         {
-            if (RayVsAABB(ray, aabbMin, aabbMax, out var f, out _, out _))
-                return f;
-            return null;
+            hitFraction = float.MaxValue;
+            hitPoint = Vector3.Zero;
+            hitNormal = Vector3.Zero;
+            var hitAny = false;
+
+            var dp = ray.Position - center;
+            var ax = ray.Direction.X;
+            var az = ray.Direction.Z;
+            var px = dp.X;
+            var pz = dp.Z;
+
+            var a = ax * ax + az * az;
+            if (a > 1e-12f)
+            {
+                var b = 2f * (px * ax + pz * az);
+                var c = px * px + pz * pz - radius * radius;
+                var disc = b * b - 4f * a * c;
+
+                if (disc >= 0f)
+                {
+                    var sqrtDisc = MathF.Sqrt(disc);
+                    var inv2a = 0.5f / a;
+                    var t0 = (-b - sqrtDisc) * inv2a;
+                    var t1 = (-b + sqrtDisc) * inv2a;
+
+                    foreach (var t in new[] { t0, t1 })
+                    {
+                        if (t < 1e-6f) continue;
+                        var y = ray.Position.Y + ray.Direction.Y * t;
+                        if (y >= center.Y - halfHeight && y <= center.Y + halfHeight && t < hitFraction)
+                        {
+                            hitFraction = t;
+                            hitPoint = ray.Position + ray.Direction * t;
+                            var horizPt = new Vector3(hitPoint.X, center.Y, hitPoint.Z);
+                            hitNormal = Vector3.Normalize(hitPoint - horizPt);
+                            hitAny = true;
+                        }
+                    }
+                }
+            }
+
+            if (MathF.Abs(ray.Direction.Y) >= 1e-12f)
+            {
+                var tTop = (center.Y + halfHeight - ray.Position.Y) / ray.Direction.Y;
+                if (tTop >= 1e-6f && tTop < hitFraction)
+                {
+                    var p = ray.Position + ray.Direction * tTop;
+                    if ((p.X - center.X) * (p.X - center.X) + (p.Z - center.Z) * (p.Z - center.Z) <= radius * radius)
+                    { hitFraction = tTop; hitPoint = p; hitNormal = Vector3.UnitY; hitAny = true; }
+                }
+                var tBot = (center.Y - halfHeight - ray.Position.Y) / ray.Direction.Y;
+                if (tBot >= 1e-6f && tBot < hitFraction)
+                {
+                    var p = ray.Position + ray.Direction * tBot;
+                    if ((p.X - center.X) * (p.X - center.X) + (p.Z - center.Z) * (p.Z - center.Z) <= radius * radius)
+                    { hitFraction = tBot; hitPoint = p; hitNormal = -Vector3.UnitY; hitAny = true; }
+                }
+            }
+
+            return hitAny;
         }
     }
 }
