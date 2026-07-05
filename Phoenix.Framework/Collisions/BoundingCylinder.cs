@@ -164,7 +164,7 @@ namespace Phoenix.Framework.Collisions
 
         void CalculateWorld()
         {
-            _world = Matrix4x4.CreateScale(Radius, HalfHeight, Radius)
+            _world = Matrix4x4.CreateScale(Radius * 2f, HalfHeight * 2f, Radius * 2f)
                 * Rotation
                 * Matrix4x4.CreateTranslation(Position);
         }

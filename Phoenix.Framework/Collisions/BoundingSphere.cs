@@ -28,15 +28,17 @@ namespace Phoenix.Framework.Collisions
 
         public BoundingSphere(Vector3 center, float radius)
         {
-            this.Center = center;
-            this.Radius = radius;
+            Center = center;
+            Radius = radius;
+
+            _world = Matrix4x4.CreateScale(Radius * 2f) * Matrix4x4.CreateTranslation(Center);
         }
 
         public void Update(Vector3 position)
         {
             Center = position;
 
-            _world = Matrix4x4.CreateScale(Radius) * Matrix4x4.CreateTranslation(Center);
+            _world = Matrix4x4.CreateScale(Radius * 2f) * Matrix4x4.CreateTranslation(Center);
         }
 
 
