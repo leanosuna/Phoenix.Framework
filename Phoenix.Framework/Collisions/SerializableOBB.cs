@@ -5,7 +5,7 @@ using Phoenix.Framework.Rendering.Gizmos;
 
 namespace Phoenix.Framework.Collisions
 {
-    public class OrientedBoxVolume : BoundingVolume
+    public class SerializableOBB : SerializableVolume
     {
         public Vector3 Position;
         public Vector3 Size = Vector3.One;
@@ -42,9 +42,9 @@ namespace Phoenix.Framework.Collisions
             };
         }
 
-        public new static OrientedBoxVolume Deserialize(JsonObject data)
+        public new static SerializableOBB Deserialize(JsonObject data)
         {
-            return new OrientedBoxVolume
+            return new SerializableOBB
             {
                 Name = (string)data["Name"]!,
                 Position = new Vector3((float)data["Pos_X"]!, (float)data["Pos_Y"]!, (float)data["Pos_Z"]!),
@@ -54,5 +54,15 @@ namespace Phoenix.Framework.Collisions
                 Roll = (float)data["Roll"]!,
             };
         }
+
+        public OrientedBoundingBox ToOBB()
+        {
+            var obb = new OrientedBoundingBox(Position, Size);
+            obb.Update(MathHelper.RotationMxFromYawPitchRoll(Yaw, Pitch, Roll));
+            return obb;
+        }
+
+        public static implicit operator OrientedBoundingBox(SerializableOBB v)
+            => v.ToOBB();
     }
 }

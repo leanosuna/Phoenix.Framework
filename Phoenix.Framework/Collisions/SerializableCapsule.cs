@@ -4,7 +4,7 @@ using Phoenix.Framework.Rendering.Gizmos;
 
 namespace Phoenix.Framework.Collisions
 {
-    public class CapsuleVolume : BoundingVolume
+    public class SerializableCapsule : SerializableVolume
     {
         public Vector3 PointA;
         public Vector3 PointB;
@@ -35,9 +35,9 @@ namespace Phoenix.Framework.Collisions
             };
         }
 
-        public new static CapsuleVolume Deserialize(JsonObject data)
+        public new static SerializableCapsule Deserialize(JsonObject data)
         {
-            return new CapsuleVolume
+            return new SerializableCapsule
             {
                 Name = (string)data["Name"]!,
                 PointA = new Vector3((float)data["A_X"]!, (float)data["A_Y"]!, (float)data["A_Z"]!),
@@ -45,5 +45,8 @@ namespace Phoenix.Framework.Collisions
                 Radius = (float)data["Radius"]!,
             };
         }
+
+        public static implicit operator Capsule(SerializableCapsule v)
+            => new(v.PointA, v.PointB, v.Radius);
     }
 }

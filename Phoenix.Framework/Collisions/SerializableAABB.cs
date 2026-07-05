@@ -4,16 +4,16 @@ using Phoenix.Framework.Rendering.Gizmos;
 
 namespace Phoenix.Framework.Collisions
 {
-    public class AxisAlignedBoxVolume : BoundingVolume
+    public class SerializableAABB : SerializableVolume
     {
         public Vector3 Center;
         public Vector3 Size = Vector3.One * 2;
 
         public override BoundingVolumeType Type => BoundingVolumeType.AABB;
 
-        public AxisAlignedBoxVolume() { }
+        public SerializableAABB() { }
 
-        public AxisAlignedBoxVolume(string name, Vector3 center, Vector3 size)
+        public SerializableAABB(string name, Vector3 center, Vector3 size)
         {
             Name = name;
             Center = center;
@@ -43,14 +43,17 @@ namespace Phoenix.Framework.Collisions
             };
         }
 
-        public new static AxisAlignedBoxVolume Deserialize(JsonObject data)
+        public new static SerializableAABB Deserialize(JsonObject data)
         {
-            return new AxisAlignedBoxVolume
+            return new SerializableAABB
             {
                 Name = (string)data["Name"]!,
                 Center = new Vector3((float)data["Center_X"]!, (float)data["Center_Y"]!, (float)data["Center_Z"]!),
                 Size = new Vector3((float)data["Size_X"]!, (float)data["Size_Y"]!, (float)data["Size_Z"]!),
             };
         }
+
+        public static implicit operator AxisAlignedBoundingBox(SerializableAABB v)
+            => new(v.Center, v.Size);
     }
 }

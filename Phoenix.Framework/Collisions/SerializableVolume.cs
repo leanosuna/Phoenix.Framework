@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.Text.Json.Nodes;
 using Phoenix.Framework.Rendering.Gizmos;
 
@@ -13,7 +12,7 @@ namespace Phoenix.Framework.Collisions
         Capsule,
     }
 
-    public abstract class BoundingVolume
+    public abstract class SerializableVolume
     {
         public string Name = "";
         public bool Visible = true;
@@ -25,16 +24,16 @@ namespace Phoenix.Framework.Collisions
 
         public abstract JsonObject Serialize();
 
-        public static BoundingVolume Deserialize(JsonObject data)
+        public static SerializableVolume Deserialize(JsonObject data)
         {
             var type = (string)data["Type"]!;
             return type switch
             {
-                "AABB" => AxisAlignedBoxVolume.Deserialize(data),
-                "OBB" => OrientedBoxVolume.Deserialize(data),
-                "Cylinder" => CylinderVolume.Deserialize(data),
-                "Sphere" => SphereVolume.Deserialize(data),
-                "Capsule" => CapsuleVolume.Deserialize(data),
+                "AABB" => SerializableAABB.Deserialize(data),
+                "OBB" => SerializableOBB.Deserialize(data),
+                "Cylinder" => SerializableCylinder.Deserialize(data),
+                "Sphere" => SerializableSphere.Deserialize(data),
+                "Capsule" => SerializableCapsule.Deserialize(data),
                 _ => throw new ArgumentException($"Unknown volume type: {type}"),
             };
         }
