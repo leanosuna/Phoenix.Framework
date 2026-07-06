@@ -99,7 +99,7 @@ namespace Phoenix.Framework.Rendering.Gizmos
 
         public void AddSphere(Vector3 position, float radius, Vector3 color, bool hit = false)
         {
-            var world = Matrix4x4.CreateScale(radius) * Matrix4x4.CreateTranslation(position);
+            var world = Matrix4x4.CreateScale(radius * 2f) * Matrix4x4.CreateTranslation(position);
             _drawList.Add(new GizmoGeometryInstance { Draw = _sphereGeometry.Draw, World = world, Color = color, Hit = hit });
         }
 
@@ -110,7 +110,7 @@ namespace Phoenix.Framework.Rendering.Gizmos
 
         public void AddCylinder(Vector3 position, float radius, float height, Quaternion rotation, Vector3 color, bool hit = false)
         {
-            var world = Matrix4x4.CreateScale(radius, height, radius)
+            var world = Matrix4x4.CreateScale(radius * 2f, height, radius * 2f)
                 * Matrix4x4.CreateFromQuaternion(rotation)
                 * Matrix4x4.CreateTranslation(position);
             _drawList.Add(new GizmoGeometryInstance { Draw = _cylinderGeometry.Draw, World = world, Color = color, Hit = hit });
@@ -172,6 +172,67 @@ namespace Phoenix.Framework.Rendering.Gizmos
             for (int i = 0; i < _frustumEdges.GetLength(0); i++)
             {
                 AddLine(corners[_frustumEdges[i, 0]], corners[_frustumEdges[i, 1]], color, hit);
+            }
+        }
+
+        public void AddCapsule(Vector3 pointA, Vector3 pointB, float radius, Vector3 color, bool hit = false)
+        {
+            var axis = pointB - pointA;
+            var len = axis.Length();
+            if (len < 1e-6f)
+            {
+                AddSphere(pointA, radius, color, hit);
+                return;
+            }
+            var dir = Vector3.Normalize(axis);
+
+            var perp = MathF.Abs(dir.X) < 0.9f
+                ? Vector3.Normalize(Vector3.Cross(dir, Vector3.UnitX))
+                : Vector3.Normalize(Vector3.Cross(dir, Vector3.UnitY));
+            var perp2 = Vector3.Normalize(Vector3.Cross(dir, perp));
+
+            var arcSegs = 16;
+            var halfArc = arcSegs / 2;
+
+            void DrawHalfCircle(Vector3 center, float startAngle)
+            {
+                for (int i = 0; i < halfArc; i++)
+                {
+                    var a0 = startAngle + i * MathF.Tau / arcSegs;
+                    var a1 = startAngle + (i + 1) * MathF.Tau / arcSegs;
+                    var p0 = center + perp * MathF.Cos(a0) * radius + perp2 * MathF.Sin(a0) * radius;
+                    var p1 = center + perp * MathF.Cos(a1) * radius + perp2 * MathF.Sin(a1) * radius;
+                    AddLine(p0, p1, color, hit);
+                }
+            }
+
+            void DrawDomeArc(Vector3 center, Vector3 outward, Vector3 refPerp)
+            {
+                for (int i = 0; i < halfArc; i++)
+                {
+                    var a0 = -MathF.PI / 2 + i * MathF.PI / halfArc;
+                    var a1 = -MathF.PI / 2 + (i + 1) * MathF.PI / halfArc;
+                    var p0 = center + refPerp * MathF.Sin(a0) * radius + outward * MathF.Cos(a0) * radius;
+                    var p1 = center + refPerp * MathF.Sin(a1) * radius + outward * MathF.Cos(a1) * radius;
+                    AddLine(p0, p1, color, hit);
+                }
+            }
+
+            DrawHalfCircle(pointA, 0f);
+            DrawHalfCircle(pointA, MathF.PI);
+            DrawHalfCircle(pointB, 0f);
+            DrawHalfCircle(pointB, MathF.PI);
+
+            DrawDomeArc(pointA, -dir, perp);
+            DrawDomeArc(pointA, -dir, perp2);
+            DrawDomeArc(pointB, dir, perp);
+            DrawDomeArc(pointB, dir, perp2);
+
+            for (int i = 0; i < 4; i++)
+            {
+                var a = i * MathF.Tau / 4f;
+                var p = perp * MathF.Cos(a) * radius + perp2 * MathF.Sin(a) * radius;
+                AddLine(pointA + p, pointB + p, color, hit);
             }
         }
 
