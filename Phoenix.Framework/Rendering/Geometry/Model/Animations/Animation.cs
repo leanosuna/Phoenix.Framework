@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using Phoenix.Framework.Rendering.Geometry;
+using System.Numerics;
 
 namespace Phoenix.Framework.Rendering.Geometry.Model.Animations
 {
@@ -7,9 +8,7 @@ namespace Phoenix.Framework.Rendering.Geometry.Model.Animations
         public string Name { get; private set; } = "";
         public float Duration { get; private set; }
         public float TicksPerSecond { get; private set; }
-        public Transform[] CurrentFrame { get; private set; } = default!;
-        public Matrix4x4[] Transforms { get; private set; } = default!;
-        
+
         private Keyframe[][] _keyFrames = default!;
 
         private float _randomStartOffset;
@@ -25,13 +24,6 @@ namespace Phoenix.Framework.Rendering.Geometry.Model.Animations
                 TicksPerSecond = 25.0f;
 
             _boneCount = _keyFrames.GetLength(0);
-            CurrentFrame = new Transform[_boneCount];
-            Transforms = new Matrix4x4[_boneCount];
-            for (int i = 0; i < _boneCount; i++)
-            {
-                CurrentFrame[i] = new Transform(Vector3.One, Quaternion.Identity, Vector3.Zero);
-                Transforms[i] = Matrix4x4.Identity;
-            }
             _randomStartOffset = (float)new Random().NextDouble() * Duration;
         }
         public void Reset()
@@ -39,7 +31,7 @@ namespace Phoenix.Framework.Rendering.Geometry.Model.Animations
             _currentTime = _randomStartOffset;
         }
 
-        public void UpdateFrameTransform(float deltaTime)
+        public void Update(float deltaTime, Matrix4x4[] finalBoneMatrices)
         {
             _currentTime += TicksPerSecond * deltaTime;
             _currentTime %= Duration;
@@ -49,28 +41,19 @@ namespace Phoenix.Framework.Rendering.Geometry.Model.Animations
                 var keys = _keyFrames[b];
                 if (keys.Length == 0)
                 {
-                    Transforms[b] = Matrix4x4.Identity;
+                    finalBoneMatrices[b] = Matrix4x4.Identity;
                     continue;
                 }
 
                 var i0 = GetStartingIndex(_currentTime, keys);
                 var i1 = Math.Min(i0 + 1, keys.Length - 1);
 
-                CurrentFrame[b] = Interpolate(keys[i0], keys[i1], _currentTime);
-            }
+                var interpolated = Interpolate(keys[i0], keys[i1], _currentTime);
 
-        }
-        public void Update(float deltaTime)
-        {
-            UpdateFrameTransform(deltaTime);
+                //var M = interpolated.AsMatrix();
+                //finalBoneMatrices[b] = Matrix4x4.Transpose(M);
 
-            for (int b = 0; b < _boneCount; b++)
-            {
-                var M = Matrix4x4.CreateScale(CurrentFrame[b].Scale)
-                       * Matrix4x4.CreateFromQuaternion(CurrentFrame[b].Rotation)
-                       * Matrix4x4.CreateTranslation(CurrentFrame[b].Translation);
-
-                Transforms[b] = M;
+                finalBoneMatrices[b] = interpolated.AsMatrix();
             }
         }
 

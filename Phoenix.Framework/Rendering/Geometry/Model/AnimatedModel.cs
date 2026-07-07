@@ -35,36 +35,7 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
                 FinalBoneMatrices = new Matrix4x4[BoneCount];
 
             var animation = Animations[_selectedAnimation];
-            animation.Update(deltaTime);
-
-            for (var i = 0; i < AnimatorNodes.Length; i++)
-            {
-                var node = AnimatorNodes[i];
-
-                var pid = node.ParentID;
-                var parentTransform = pid != -1 ? AnimatorNodes[pid].Transform : Matrix4x4.Identity;
-
-                Matrix4x4 localTransform;
-                if (node.IsBone)
-                {
-                    var animTransform = animation.Transforms[node.ModelBoneID];
-
-                    animTransform.Transpose();
-
-                    localTransform = animTransform;
-                }
-                else
-                    localTransform = node.BindTransform;
-
-                node.Transform = parentTransform * localTransform;
-
-                if (node.IsBone)
-                {
-                    var final = InverseGlobalTransform * node.Transform * node.Offset;
-                    final.Transpose();
-                    FinalBoneMatrices[node.ModelBoneID] = final;
-                }
-            }
+            animation.Update(deltaTime, FinalBoneMatrices);
         }
 
     }
