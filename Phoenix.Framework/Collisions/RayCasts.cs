@@ -1,4 +1,3 @@
-using Phoenix.Framework.Maths;
 using System.Numerics;
 
 namespace Phoenix.Framework.Collisions
@@ -106,83 +105,155 @@ namespace Phoenix.Framework.Collisions
             return true;
         }
 
+        // Algorithm: Real-Time Collision Detection §5.1.9 and box3d b3RayCastCapsule
         public static bool RayVsCapsule(Ray ray, Vector3 pointA, Vector3 pointB, float radius,
-            out float hitFraction, out Vector3 hitPoint, out Vector3 hitNormal)
+            out float hitFraction, out Vector3 hitPoint, out Vector3 hitNormal, float maxDist = float.MaxValue)
         {
             hitFraction = 0f;
             hitPoint = Vector3.Zero;
             hitNormal = Vector3.Zero;
 
-            var segLenSq = Vector3.DistanceSquared(pointA, pointB);
-            if (segLenSq <= (2f * radius) * (2f * radius) + 1e-6f)
-                return RayVsSphere(ray, (pointA + pointB) * 0.5f, radius, out hitFraction, out hitPoint, out hitNormal);
-
-            var closestOnAxis = MathEx.ClosestPointOnSegment(pointA, pointB, ray.Position);
-
-            var insideDist = Vector3.Distance(ray.Position, closestOnAxis);
-            if (insideDist <= radius)
-            {
-                var outDir = Vector3.Normalize(ray.Position - closestOnAxis);
-                if (outDir == Vector3.Zero) outDir = -ray.Direction;
-                hitPoint = ray.Position;
-                hitNormal = outDir;
-                hitFraction = 0f;
-                return true;
-            }
-
-            var axis = pointB - pointA;
-            var axisLen = MathF.Sqrt(segLenSq);
-            var axisDir = axis / axisLen;
-
-            var closestToRay = MathEx.ClosestPointOnSegment(ray.Position, ray.Position + ray.Direction * 1000f, closestOnAxis);
-
-            var distToAxis = Vector3.Distance(closestToRay, closestOnAxis);
-            if (distToAxis > radius)
+            if (maxDist <= 0f)
                 return false;
 
-            var halfChord = MathF.Sqrt(MathF.Max(0f, radius * radius - distToAxis * distToAxis));
-            var centerOnAxis = closestOnAxis + axisDir * (Vector3.Dot(closestToRay - closestOnAxis, axisDir));
-            var tOnAxis = Vector3.Dot(centerOnAxis - pointA, axisDir);
-            var startOnAxis = -halfChord;
-            var endOnAxis = halfChord;
+            var d = pointB - pointA;
+            var axisLengthSq = d.LengthSquared();
 
-            if (startOnAxis + tOnAxis < 0f)
+            const float tol = 1e-5f;
+            if (axisLengthSq < tol * tol)
+                return RayVsSphere(ray, (pointA + pointB) * 0.5f, radius, out hitFraction, out hitPoint, out hitNormal);
+
+            var s = ray.Position - pointA;
+            var axisLength = MathF.Sqrt(axisLengthSq);
+            var axis = d / axisLength;
+            var rr = radius * radius;
+
+            var u = Vector3.Dot(s, axis);
+            var closestAxis = axis * u;
+            var sc = s - closestAxis;
+            var sc2 = sc.LengthSquared();
+
+            if (sc2 < rr)
             {
-                if (!RayVsSphere(ray, pointA, radius, out var tA, out var ptA, out var nA))
+                var uClamped = Math.Clamp(u, 0f, axisLength);
+                var cp = axis * uClamped;
+                var scp = s - cp;
+                var scp2 = scp.LengthSquared();
+
+                if (scp2 < rr)
+                {
+                    hitPoint = ray.Position;
+                    hitFraction = 0f;
+                    var outLen = MathF.Sqrt(scp2);
+                    hitNormal = outLen > 1e-12f ? scp / outLen : Vector3.UnitY;
+                    return true;
+                }
+
+                Vector3 sphereCenter = u < 0f ? pointA : pointB;
+                if (!RayVsSphere(ray, sphereCenter, radius, out float ts, out Vector3 pts, out Vector3 ns))
                     return false;
-                hitFraction = tA;
-                hitPoint = ptA;
-                hitNormal = nA;
+                if (ts > maxDist)
+                    return false;
+                hitFraction = ts;
+                hitPoint = pts;
+                hitNormal = ns;
                 return true;
             }
-            if (endOnAxis + tOnAxis > axisLen)
+
+            var dr = ray.Direction;
+            var rayLength = dr.Length();
+            if (rayLength < 1e-12f)
+                return false;
+            var rayAxis = dr / rayLength;
+
+            var a12 = Vector3.Dot(axis, rayAxis);
+
+            var hasFinite = !float.IsInfinity(maxDist);
+            if (hasFinite && maxDist < float.MaxValue * 0.5f)
             {
-                if (!RayVsSphere(ray, pointB, radius, out var tB, out var ptB, out var nB))
+                var extent = maxDist * Vector3.Dot(dr, axis);
+                if (float.IsFinite(extent))
+                {
+                    var v = u + extent;
+                    if ((u < -radius && v < -radius) || (axisLength + radius < u && axisLength + radius < v))
+                        return false;
+                }
+            }
+            else if (a12 == 0f && (u < -radius || axisLength + radius < u))
+            {
+                return false;
+            }
+
+            var det = 1f - a12 * a12;
+            float tr;
+
+            if (det < 1e-7f)
+            {
+                var perp = rayAxis - axis * a12;
+                var perp2 = perp.LengthSquared();
+                var beta = Vector3.Dot(sc, perp);
+                var gamma = sc2 - rr;
+                var disc = beta * beta - perp2 * gamma;
+
+                if (beta >= 0f || disc < 0f)
                     return false;
-                hitFraction = tB;
-                hitPoint = ptB;
-                hitNormal = nB;
+
+                tr = gamma / (-beta + MathF.Sqrt(disc));
+            }
+            else
+            {
+                var invDet = 1f / det;
+                var sa1 = u;
+                var sa2 = Vector3.Dot(s, rayAxis);
+
+                var t1 = (sa1 - a12 * sa2) * invDet;
+                var t2 = (a12 * sa1 - sa2) * invDet;
+
+                var p1 = axis * t1;
+                var p2 = s + rayAxis * t2;
+                var g = p2 - p1;
+                var g2 = g.LengthSquared();
+
+                if (g2 > rr)
+                    return false;
+
+                var h = MathF.Sqrt(MathF.Max(0f, (rr - g2) * invDet));
+                tr = t2 - h;
+            }
+
+            var maxWorld = maxDist * rayLength;
+            if (tr < 0f || (hasFinite && maxWorld < tr))
+                return false;
+
+            var tc = u + tr * a12;
+
+            if (tc < 0f)
+            {
+                if (!RayVsSphere(ray, pointA, radius, out float ts, out Vector3 pts, out Vector3 ns))
+                    return false;
+                if (ts > maxDist)
+                    return false;
+                hitFraction = ts;
+                hitPoint = pts;
+                hitNormal = ns;
                 return true;
             }
 
-            var localOrigin = Vector3.Dot(ray.Position - pointA, axisDir);
-            var localDir = Vector3.Dot(ray.Direction, axisDir);
-            if (MathF.Abs(localDir) < 1e-8f)
+            if (axisLength < tc)
             {
-                hitFraction = startOnAxis + tOnAxis >= 0f ? 0f : float.MaxValue;
-                return hitFraction < float.MaxValue;
+                if (!RayVsSphere(ray, pointB, radius, out float ts, out Vector3 pts, out Vector3 ns))
+                    return false;
+                if (ts > maxDist)
+                    return false;
+                hitFraction = ts;
+                hitPoint = pts;
+                hitNormal = ns;
+                return true;
             }
 
-            var tEnter = (startOnAxis - localOrigin) / localDir;
-            var tExit = (endOnAxis - localOrigin) / localDir;
-            if (tEnter > tExit) { var tmp = tEnter; tEnter = tExit; tExit = tmp; }
-
-            if (tEnter < 0f) tEnter = tExit;
-            if (tEnter < 0f) return false;
-
-            hitFraction = tEnter;
-            hitPoint = ray.Position + ray.Direction * tEnter;
-            hitNormal = Vector3.Normalize(hitPoint - MathEx.ClosestPointOnSegment(pointA, pointB, hitPoint));
+            hitFraction = tr / rayLength;
+            hitPoint = pointA + s + rayAxis * tr;
+            hitNormal = Vector3.Normalize(hitPoint - (pointA + axis * tc));
             return true;
         }
 
