@@ -12,7 +12,7 @@ These will handle setting up and updating all internal systems every frame in th
 Run()
  └── Window.Create()
       └── Window.Load       → InternalLoad()
-           ├── InputManager created
+           ├── Input created
            ├── UI created (ImGui initialized)
            ├── RTManager created
            ├── Scene render target created
@@ -27,7 +27,7 @@ Run()
            │    └── Initialize() called
            │
            ├── Graphics.Time += dt
-           ├── InputManager.Update()
+           ├── Input.Update()
            ├── Render halt check (F11)
            ├── Update(dt)          ← user code
            ├── CommonUBO updated
@@ -55,6 +55,14 @@ This internal control allows the game to be halted at any time using the configu
 ## Important Notes
 - The `CommonUBO` is updated every frame with `[View, Projection, Time, DeltaTime]` and bound at binding point 0.
 
+## Methods
+
+| Method | Description |
+|--------|-------------|
+| `Run()` | Starts the game loop (blocking) |
+| `Stop()` | Closes the window and exits the game loop |
+| `SetDefaultIcon()` | Applies the default Phoenix window icon |
+| `SetCustomWindowIcon(string path)` | Loads and applies a custom window icon from a file path |
 
 ## Properties
 
@@ -67,17 +75,21 @@ This internal control allows the game to be halted at any time using the configu
 | `WindowSize` | `Vector2` | Current window dimensions |
 | `WindowWidth` | `int` | Width shortcut |
 | `WindowHeight` | `int` | Height shortcut |
+| `FramebufferSize` | `Vector2` | Current framebuffer dimensions (can differ from `WindowSize` when scaled) |
+| `FramebufferWidth` | `int` | Framebuffer width shortcut |
+| `FramebufferHeight` | `int` | Framebuffer height shortcut |
 
 ### System Access
 
 | Property | Type | Notes |
 |----------|------|-------|
-| `InputManager` | `InputManager` | Read-only. Do not assign. |
+| `Input` | `Input` | Read-only. Keyboard/mouse polling. See [Input](input.md). |
 | `FullScreenQuad` | `FullScreenQuad` | Read-only. Single quad for post-processing. |
 | `Gizmos` | `Gizmos` | Read-only. Debug drawing. |
 | `UI` | `UI` | Read-only. ImGui and text overlay. |
 | `Camera` | `Camera` | Settable. Assign your camera instance in `Initialize()`. |
 | `Graphics` | `Graphics` | Read-only after load. |
+| `NetworkManager` | `NetworkManager` | Read-only. Networking (not yet fully implemented). |
 | `CommonUboHandle` | `uint` | UBO handle bound at binding point 0. |
 
 

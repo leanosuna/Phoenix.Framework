@@ -67,13 +67,17 @@ nav:
       - Shaders: rendering/shaders.md
       - Textures: rendering/textures.md
       - Models & Animation: rendering/models.md
+      - Primitives: rendering/primitives.md
       - UI & ImGui: rendering/ui.md
       - Gizmos: rendering/gizmos.md
   - Collision System:
       - Overview: collisions/overview.md
       - Ray Casting: collisions/ray.md
+      - Ray Casts: collisions/raycasts.md
       - Bounding Spheres: collisions/spheres.md
       - Frustums & Boxes: collisions/frustum-box.md
+      - Collision Manifolds: collisions/manifold.md
+      - Serializable Volumes: collisions/serializable.md
   - Audio: audio/sound.md
   - Asset Pipeline:
       - Loading Assets: asset-pipeline/loading.md

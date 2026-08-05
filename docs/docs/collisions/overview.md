@@ -12,6 +12,7 @@ Phoenix provides a comprehensive set of 3D collision volumes and intersection te
 | `OrientedBoundingBox` | `OrientedBoundingBox.cs` | Position + size + orientation matrix |
 | `BoundingFrustum` | `BoundingFrustum.cs` | 6-plane view frustum |
 | `BoundingCylinder` | `BoundingCylinder.cs` | Position + radius + height + rotation |
+| `Capsule` | `Capsule.cs` | Segment (A–B) + radius |
 
 ## Intersection Test Types
 
@@ -44,7 +45,6 @@ ContainmentType type = aabb.Contains(sphere);
 Vector3[] corners = aabb.GetCorners();
 
 // Frustum tests
-bool inFrustum = frustum.Contains(point);
 bool inFrustum = frustum.Contains(sphere);
 bool inFrustum = frustum.Contains(aabb);
 Vector3[] corners = frustum.GetCorners();
@@ -58,7 +58,16 @@ bool hits = obb.Intersects(ray, out float? dist);
 bool hits = cylinder.Intersects(ray);
 bool hits = cylinder.Intersects(sphere);
 ContainmentType type = cylinder.Contains(point);
+
+// Capsule tests
+bool hits = capsule.Intersects(ray);
 ```
+
+> Note: `BoundingFrustum.Contains(Vector3 point)` is currently unimplemented (always returns `Disjoint`). Use the sphere/AABB overloads, or `ContainsPrecise` on AABBs.
+
+## Manifold API & Ray Casting
+
+For position/depth resolution between two volumes, see [Collision Manifolds](manifold.md). For rich ray-cast results (hit point + normal + fraction), see [Ray Casts](raycasts.md).
 
 ## Drawing Volumes with Gizmos
 
@@ -79,9 +88,6 @@ Gizmos.AddVolume(cylinder, new Vector3(1, 0.5f, 0.5f));
 ```csharp
 // Create bounding sphere from model vertices
 var sphere = BoundingSphere.CreateFromPoints(modelVertices);
-
-// Create AABB from points
-var aabb = AxisAlignedBoundingBox.CreateFromPoints(modelVertices);
 
 // Create sphere from AABB
 var sphereFromBox = BoundingSphere.CreateFromBoundingBox(aabb);
@@ -105,12 +111,14 @@ var obb = OrientedBoundingBox.FromAABB(aabb);
 // Transform a sphere by a matrix
 var transformed = sphere.Transform(worldMatrix);
 
-// Transform a box by a matrix
-var transformedBox = aabb.Transform(worldMatrix);
+// Reposition an AABB (recompute min/max from center)
+aabb.Update(newPosition);
 
-// Transform a frustum
+// Transform a frustum (recompute planes)
 frustum.Update(Camera.View * Camera.Projection);
 ```
+
+> Note: `AxisAlignedBoundingBox` has no `Transform(matrix)` method — it is axis-aligned. Use `Update(Vector3)` to reposition it, or convert to an OBB via `OrientedBoundingBox.FromAABB` for oriented transforms.
 
 ## Coordinate Space Conversions (OBB)
 
@@ -124,20 +132,20 @@ Vector3 worldPoint = obb.ToWorldSpace(localPoint);
 
 ## Plane Helpers
 
-The `PlaneHelper` utility provides plane transformations and distance calculations:
+The `PlaneHelper` utility provides plane transformations and distance calculations (extension methods on `Plane`):
 
 ```csharp
 // Classify a point relative to a plane
-PlaneIntersectionType type = PlaneHelper.ClassifyPoint(plane, point);
+float type = plane.ClassifyPoint(point);
 
 // Get perpendicular distance from point to plane
-float distance = PlaneHelper.PerpendicularDistance(plane, point);
+float distance = plane.PerpendicularDistance(point);
 
 // Transform a plane by a matrix
-Plane transformed = PlaneHelper.Transform(plane, matrix);
+Plane transformed = plane.Transform(matrix);
 
 // Transform a plane by a quaternion
-Plane transformed = PlaneHelper.Transform(plane, rotation);
+Plane transformed = plane.Transform(rotation);
 ```
 
 ## See Also
@@ -145,4 +153,7 @@ Plane transformed = PlaneHelper.Transform(plane, rotation);
 - [Ray Casting](ray.md) — detailed ray intersection guide
 - [Bounding Spheres](spheres.md) — sphere operations
 - [Frustums & Boxes](frustum-box.md) — frustum, AABB, OBB, cylinder
+- [Collision Manifolds](manifold.md) — push-out vectors and depth between volumes
+- [Ray Casts](raycasts.md) — ray vs volume with hit point/normal/fraction
+- [Serializable Volumes](serializable.md) — editor-serializable collision volumes
 - [Gizmos](../rendering/gizmos.md) — visualize collision volumes

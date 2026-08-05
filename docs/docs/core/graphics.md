@@ -26,14 +26,14 @@ Performance counters are grouped in the `Metrics` property.
 |---|---|---|
 | `Time` | `double` | Total elapsed time in seconds |
 | `FrameTime` | `double` | Render frame delta time |
-| `UpdateDeltaTime` | `double` | Update loop delta time |
 | `FT_SAMPLE` | `int` | Smoothed frame time sample (ms) |
-| `FT_SAMPLE_RATE` | `double` | Frame time sample rate (default `0.3`) |
+| `FT_SAMPLE_RATE` | `double` | Frame time sample rate (default `0.25`) |
 | `FPS` | `double` | Instantaneous frames per second |
 | `FPS_SAMPLE` | `int` | Smoothed FPS sample |
-| `FPS_SAMPLE_RATE` | `double` | FPS sample rate (default `0.3`) |
-| `UPD_SAMPLE` | `int` | Smoothed updates per second sample |
-| `UPD_SAMPLE_RATE` | `double` | Update sample rate (default `0.3`) |
+| `FPS_SAMPLE_RATE` | `double` | FPS sample rate (default `0.25`) |
+| `UPS` | `double` | Instantaneous updates per second |
+| `UPS_SAMPLE` | `int` | Smoothed updates per second sample |
+| `UPS_SAMPLE_RATE` | `double` | Update sample rate (default `0.25`) |
 
 
 ## Methods
@@ -42,8 +42,10 @@ Performance counters are grouped in the `Metrics` property.
 
 | Method | Description |
 |---|---|
-| `SetResolution(Vector2 size, bool fullscreen = true)` | Set window resolution, optionally fullscreen |
-| `SetResolution(Vector2 size, Vector2 position, bool fullscreen = true)` | Set window resolution with custom position |
+| `SetFullscreen(bool value)` | Toggle fullscreen mode |
+| `SetMaximized()` | Maximize the window |
+| `SetWindowed(Vector2 size, bool border = true)` | Set window size, optionally windowed border |
+| `SetWindowed(Vector2 size, Vector2 position, bool border = true)` | Set window size and position |
 | `SetWindowBorder(WindowBorder type)` | Change window border style |
 
 ### GL State
@@ -80,8 +82,10 @@ Graphics.SetStencilWriteMask(0xFF);
 
 ```csharp
 Graphics.SetClearColor(new Vector4(0.1f, 0.15f, 0.2f, 1f));
-Graphics.ClearRenderTarget();
+Graphics.SetClearColor(Color.Black);       // System.Drawing.Color overload
+Graphics.ClearRenderTarget();              // color + depth + stencil
 Graphics.ClearRenderTarget(true, true, false);  // color + depth only
+Graphics.ClearRenderTarget(ClearBufferMask.ColorBufferBit);  // mask overload
 ```
 
 ### Render Target Operations
@@ -112,11 +116,13 @@ var rt = Graphics.NewRenderTarget();  // shortcut for the above
 var rt = Graphics.BuildRenderTarget()
     .SetName("post-process-rt")
     .AddTexture(Graphics.BuildTargetTexture()
-        .SetFormat(GLEnum.Rgba8)
+        .SetFormat(InternalFormat.Rgba8)
         .SetWrapS(GLEnum.ClampToEdge)
+        .SetWrapT(GLEnum.ClampToEdge)
         .SetMinFilter(GLEnum.Linear)
+        .SetMagFilter(GLEnum.Linear)
         .SetStatic(new Vector2(1024, 1024)))
-    .SetDepthBuffer(new DepthBuffer())
+    .SetDepthBuffer(new DepthBuffer(new Vector2(1024, 1024), GLEnum.Depth24Stencil8))
     .Build();
 
 // Dynamic size (follows window scaling)
@@ -131,9 +137,10 @@ var rt = Graphics.BuildRenderTarget()
 ### Depth Buffer
 
 ```csharp
-new DepthBuffer()                              // Window-sized, Depth24Stencil8
-new DepthBuffer(GLEnum.Depth24Stencil8)
-new DepthBuffer(new Vector2(1024, 1024))  // Fixed size
+new DepthBuffer()                                   // Window-sized, Depth24Stencil8
+new DepthBuffer(GLEnum.Depth24Stencil8)             // Window-sized, custom format
+new DepthBuffer(new Vector2(1024, 1024))            // Fixed size, Depth24Stencil8
+new DepthBuffer(new Vector2(1024, 1024), GLEnum.Depth24Stencil8)  // Fixed size + format
 ```
 
 ### Using Render Targets

@@ -43,7 +43,7 @@ if (distance.HasValue)
 ### Ray vs AxisAlignedBoundingBox
 
 ```csharp
-AxisAlignedBoundingBox box = new AxisAlignedBoundingBox(min, max);
+AxisAlignedBoundingBox box = new AxisAlignedBoundingBox(center, size);
 float? distance = ray.Intersects(box);
 if (distance.HasValue)
 {
@@ -65,13 +65,7 @@ if (distance.HasValue)
 
 ### Ray vs Line Segment
 
-```csharp
-float? distance = ray.Intersects(lineOrigin, lineDestination);
-if (distance.HasValue)
-{
-    // Ray hit the line segment
-}
-```
+The `Ray` class itself has no line-segment overload. Use `BoundingCylinder.Intersects(pointA, pointB)` for a line segment test, or the richer [`RayCasts`](raycasts.md) API for point/normal results.
 
 ## Mouse Picking Example
 
@@ -80,9 +74,10 @@ Convert a screen coordinate to a world-space ray:
 ```csharp
 protected override void Update(double dt)
 {
-    if (InputManager.KeyDownOnce(Key.MouseLeft))
+    if (Input.MouseLeftDownOnce())
     {
-        Vector2 mousePos = InputManager.MousePosition;  // Screen space
+        // Absolute cursor position (screen space)
+        Vector2 mousePos = Input.GetContext().Mice[0].Position;
 
         // Convert to normalized device coordinates (-1 to +1)
         float ndcX = (mousePos.X / WindowWidth) * 2f - 1f;
@@ -90,13 +85,13 @@ protected override void Update(double dt)
 
         // Unproject using inverse view-projection
         Matrix4x4 invVP = Matrix4x4.Invert(Camera.View * Camera.Projection);
-        Vector3 near = new Vector3(ndcX, ndcY, 0f);
-        Vector3 far = new Vector3(ndcX, ndcY, 1f);
+        Vector4 nearClip = new Vector4(ndcX, ndcY, 0f, 1f);
+        Vector4 farClip = new Vector4(ndcX, ndcY, 1f, 1f);
 
-        Vector3 nearWorld = Vector3.TransformCoordinate(near, invVP);
-        Vector3 farWorld = Vector3.TransformCoordinate(far, invVP);
+        Vector3 nearWorld = Unproject(nearClip, invVP);
+        Vector3 farWorld = Unproject(farClip, invVP);
 
-        Ray ray = new Ray(nearWorld, (farWorld - nearWorld).Normal());
+        Ray ray = new Ray(nearWorld, Vector3.Normalize(farWorld - nearWorld));
 
         // Test against scene objects
         float? hitDist = ray.Intersects(enemyCollisionSphere);
@@ -106,6 +101,12 @@ protected override void Update(double dt)
             enemy.TakeDamage(25);
         }
     }
+}
+
+static Vector3 Unproject(Vector4 clip, Matrix4x4 invVP)
+{
+    Vector4 world = Vector4.Transform(clip, invVP);
+    return new Vector3(world.X, world.Y, world.Z) / world.W;
 }
 ```
 
@@ -127,4 +128,5 @@ protected override void Update(double dt)
 
 - [Bounding Spheres](spheres.md) — `BoundingSphere.Intersects(Ray)`
 - [Frustums & Boxes](frustum-box.md) — other volume ray tests
+- [Ray Casts](raycasts.md) — `RayVs*` with hit point, normal, and fraction
 - [Gizmos](../rendering/gizmos.md) — visualize rays with `AddLine`

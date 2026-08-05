@@ -30,10 +30,47 @@ when trying to access these properties preventing runtime uniform not found erro
 
 This class allows type checking of a shader uniform using a common Set(T value)  
 
+```csharp
+public ShaderUniform<T>(GLShader shader, string name, bool throwIfNotFound = true)
+public void Set(T value)
+```
 
 ## ShaderTextureUniform
 
 This class allows binding a texture and using it in a shader
+
+```csharp
+public ShaderTextureUniform(GLShader shader, string name, int slot, bool throwIfNotFound = true)
+public void Set(GLTexture tex)
+public void Set(GLTextureCube texCube)
+public void Set(uint tex)
+```
+
+## GLShader
+
+The raw shader wrapper used internally by `ShaderHelper` (and available directly via `AssetLoader.LoadShader`):
+
+```csharp
+// Loads {path}.vert + {path}.frag
+public GLShader(GL glContext, string path, bool ignoreUniformsNotFound = false)
+public GLShader(GL glContext, string vertexPath, string fragmentPath, bool ignoreUniformsNotFound = false)
+
+public void SetAsCurrentGLProgram()
+public bool IsCurrent()
+public int GetUniformLocation(string name)
+public void SetUniform<T>(int location, T value)      // generic typed upload
+public void SetUniform<T>(string name, T value)
+public void SetTextureUniform(string name, uint tex, int slot)
+public void SetTextureUniform(string name, GLTexture tex, int slot)
+public void SetTextureUniform(string name, GLTextureCube tex, int slot)
+public void SetTextureUniform(int location, uint tex, int slot)
+public void SetTextureUniform(int location, GLTexture tex, int slot)
+public void SetTextureUniform(int location, GLTextureCube tex, int slot)
+public void AttachUBO(uint bufferHandle, string uniformBlockName, uint binding = 0)
+public void Dispose()
+```
+
+When `ignoreUniformsNotFound` is true, missing uniforms are silently skipped instead of reported.
 
 
 ## Example ShaderHelper for a BasicModel.vert and BasicModel.frag shader pair.

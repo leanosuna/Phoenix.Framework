@@ -21,7 +21,6 @@ Log.Time = true;         // Include time in log entries
 ```csharp
 // Informational
 Log.Info("Game started");
-Log.Info("Loaded {0} models", modelCount);
 
 // Warnings
 Log.Warn("Low disk space, may fail to save");
@@ -30,11 +29,13 @@ Log.Warn("Low disk space, may fail to save");
 Log.Error("Failed to load texture: textures/missing.png");
 
 // Debug
-Log.Debug("Processing frame {0}", frameCount);
+Log.Debug("Processing frame 42");
 
 // Exceptions
-Log.Exception("Crash occurred", ex);
+Log.Exception("Crash occurred");
 ```
+
+> Note: all `Log` methods take a single plain `string` message — no format placeholders or exception arguments.
 
 ### Clearing the Log
 
@@ -146,7 +147,7 @@ public class MyGame : PhoenixGame
         }
         catch (Exception ex)
         {
-            Log.Exception("Update loop error", ex);
+            Log.Exception($"Update loop error: {ex.Message}");
             ErrorListWindow.Add($"Update error: {ex.Message}");
         }
     }
@@ -159,7 +160,7 @@ public class MyGame : PhoenixGame
         }
         catch (Exception ex)
         {
-            Log.Exception("Render loop error", ex);
+            Log.Exception($"Render loop error: {ex.Message}");
             ErrorListWindow.Add($"Render error: {ex.Message}");
         }
     }
@@ -185,9 +186,9 @@ Example:
 
 ```
 [2026-05-10 14:32:01] INFO: Game started
-[2026-05-10 14:32:02] WARN: Low disk space
-[2026-05-10 14:32:05] ERROR: Shader compile failed
-[2026-05-10 14:32:05] EXCEPTION: System.Exception: Shader compile failed
+[2026-05-10 14:32:02] WARN: CFG not found, loading default.
+[2026-05-10 14:32:05] ERROR: Expected 3 enemies, found 2.
+[2026-05-10 14:32:05] EXCEPTION: System.NullReferenceException: Object reference not set to an instance of an object.
 ```
 
 ## See Also

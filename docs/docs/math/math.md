@@ -23,10 +23,8 @@ float degs = MathF.PI.ToDeg();  // → 180f
 ### Math Operations
 
 ```csharp
-float lerp = 0.5f.Lerp(0f, 1f);      // Linear interpolation: 0.5
-float wrapped = 400f.WrapAngle(360f); // Wrap angle: 40
-
-// Note: WrapAngle takes modulus value, not a range
+float lerp = MathHelper.Lerp(0f, 1f, 0.5f);  // Linear interpolation: 0.5
+float wrapped = MathHelper.WrapAngle(400f);  // Wrap to [-π, π]
 ```
 
 ## Vector2 Extensions
@@ -34,7 +32,6 @@ float wrapped = 400f.WrapAngle(360f); // Wrap angle: 40
 ### Conversion
 
 ```csharp
-int x = vector2.ToNum();      // X component as int
 float[] arr = vector2.ToFloatArray();  // [X, Y]
 ```
 

@@ -22,8 +22,8 @@ It targets .NET 10 and runs on Windows, macOS, and Linux.
 | Render Targets | Stable | Fluent builder API, dynamic sizing, framebuffer blitting |
 | Models | Stable | Assimp-powered binary format, skeleton animation, bone blending |
 | UI (ImGui) | Stable | Overlay rendering, custom fonts, image drawing |
-| Gizmos | Stable | Line-based debug drawing: lines, cubes, spheres, frustums |
-| Collision | Stable | Ray casting, bounding spheres, frustums, AABB/OBB, cylinders |
+| Gizmos | Stable | Line-based debug drawing: lines, cubes, spheres, capsules, frustums |
+| Collision | Stable | Ray casting, bounding spheres, frustums, AABB/OBB, cylinders, capsules, manifold API |
 | Audio | Stable | OpenAL-based, pluggable decoders (WAV built-in) |
 | Asset Pipeline | Stable | JSON manifest-based loading, cached asset resolution |
 | Networking | Planned | Not yet implemented |
@@ -33,7 +33,7 @@ It targets .NET 10 and runs on Windows, macOS, and Linux.
 ```
 PhoenixGame
  ├── Graphics ──────► RenderTargets, FullScreenQuad, CommonUBO
- ├── InputManager ──► Keyboard, Mouse, Edge-detect
+ ├── Input ─────────► Keyboard, Mouse, Edge-detect
  ├── Camera ────────► View/Projection matrices
  ├── Gizmos ────────► Debug line rendering
  ├── UI ────────────► ImGui overlay + ErrorListWindow

@@ -11,9 +11,23 @@ Phoenix handles textures through `GLTexture` objects and are loaded the [Asset l
 | `Size` | `Vector2` | Base texture dimensions |
 | `WrapS` / `WrapT` | `int` | Wrap mode (S and T axes) |
 | `FilterMin` / `FilterMag` | `int` | Minification and magnification filters |
+| `Anisotropic` | `float` | Anisotropic filtering level |
 | `Format` | `byte` | Compression format: `0`=RGBA8, `1`=BC1, `2`=BC3, `3`=BC5 |
+| `InternalFormat` | `InternalFormat` | OpenGL internal format |
 | `MipCount` | `int` | Number of mipmaps |
 | `MipSizes` | `Vector2[]` | Size of each mipmap level |
+| `EncodedBytes` | `byte[][]` | Raw encoded bytes per mipmap level |
+
+### Methods
+
+| Method | Description |
+|--------|-------------|
+| `Bind(TextureUnit slot = TextureUnit.Texture0)` | Bind the texture to a texture unit |
+| `Resize(Vector2 size)` | Resize the texture storage |
+
+### GLTextureCube
+
+Cubemap textures expose `Handle` (uint) and `Bind(TextureUnit slot = TextureUnit.Texture0)`. Loaded via `AssetLoader.LoadTextureCube(string[] names)` (6 faces).
 
 ## Supported compression Formats
 
@@ -27,5 +41,5 @@ Phoenix handles textures through `GLTexture` objects and are loaded the [Asset l
 ## See Also
 
 - [AssetLoader](../asset-pipeline/loading.md) — resolves textures by name from manifest
-- [Render Targets](../core/graphics.md#render-targets) — creates dynamic textures
+- [Render Targets](../core/graphics.md#render-target-operations) — creates dynamic textures
 - [UI & ImGui](ui.md) — draws textures in overlay

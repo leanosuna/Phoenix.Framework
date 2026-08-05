@@ -6,10 +6,10 @@ Phoenix loads 3D models from binary format (compiled from Assimp by [AssetTool](
 
 ```csharp
 // Load a static model
-var staticModel = (Model)AssetLoader.LoadModel("props/box");
+var staticModel = AssetLoader.LoadModel("props/box");
 
 // Load an animated model
-var animatedModel = (AnimatedModel)AssetLoader.LoadModel("characters/walk");
+var animatedModel = AssetLoader.LoadAnimatedModel("characters/walk");
 ```
 
 ## Model Hierarchy
@@ -22,15 +22,18 @@ Model
  │           └── Name: string
  │           └── Transform: Matrix4x4
  │           └── Draw()
- └── TextureNames: List<string>
+ ├── TextureNames: List<string>
+ └── HasTextures: bool
 
 AnimatedModel : Model
  ├── Animations: List<Animation>
  ├── AnimatorNodes: AnimatorNode[]
- ├── InverseGlobalTransform: Matrix4x4[]
+ ├── InverseGlobalTransform: Matrix4x4
  ├── BoneCount: int
  ├── FinalBoneMatrices: Matrix4x4[]
+ ├── EnableBoneWorldTransforms: bool
  ├── SetAnimation(int index)
+ ├── SetAnimationBlend(int index, float duration = 0.25f)
  └── Update(float deltaTime)
 ```
 
@@ -77,7 +80,7 @@ protected override void Render(double dt)
         {
             // Pass bone matrices to shader
             ShaderAnimated.Use();
-            ShaderAnimated.BoneMatrices.Set(model.FinalBoneMatrices));
+            ShaderAnimated.BoneMatrices.Set(model.FinalBoneMatrices);
             mesh.Draw();
         }
     }
@@ -90,13 +93,25 @@ protected override void Render(double dt)
 |----------|------|-------------|
 | `Animations` | `List<Animation>` | All animations in the model |
 | `AnimatorNodes` | `AnimatorNode[]` | Bone hierarchy nodes |
-| `InverseGlobalTransform` | `Matrix4x4[]` | Bone offset matrices |
+| `InverseGlobalTransform` | `Matrix4x4` | Single inverse global transform (root offset) |
 | `BoneCount` | `int` | Number of bones |
 | `FinalBoneMatrices` | `Matrix4x4[]` | Final world-space bone matrices (updated by `Update`) |
+| `EnableBoneWorldTransforms` | `bool` | When `true`, computes world-space bone transforms (default `false`) |
+
+### Methods
+
+| Method | Description |
+|--------|-------------|
+| `SetAnimation(int index)` | Switch to the animation at `index` (resets to frame 0) |
+| `SetAnimationBlend(int index, float duration = 0.25f)` | Cross-fade to the animation over `duration` seconds |
+| `Update(float deltaTime)` | Advance current animation and compute bone matrices |
+| `GetBoneWorldTransforms()` | `ReadOnlySpan<BoneWorldTransform>` — world-space bone transforms, valid when `EnableBoneWorldTransforms` is true |
+
+`BoneWorldTransform` is a struct with `Position` (`Vector3`) and `Rotation` (`Quaternion`).
 
 ## Animations
 
-Each `Animation` represents one animation clip (e.g., "Idle", "Walk", "Attack").
+Each `Animation` represents one animation clip (e.g., "Idle", "Walk", "Attack"). Animations are precalculated at load time; per-frame work is interpolation only.
 
 ### Properties
 
@@ -105,14 +120,17 @@ Each `Animation` represents one animation clip (e.g., "Idle", "Walk", "Attack").
 | `Name` | `string` | Animation name |
 | `Duration` | `float` | Total duration in seconds |
 | `TicksPerSecond` | `float` | Keyframe ticks per second |
-| `CurrentFrame` | `Transform[]` | Interpolated transforms per bone |
-| `Transforms` | `Matrix4x4[]` | Final matrix per bone |
+
+Methods: `Reset()` (rewind to frame 0) and `Update(float deltaTime, Matrix4x4[] finalBoneMatrices)` (internal pipeline use).
 
 ### Playing Animations
 
 ```csharp
 model.SetAnimation(0);  // First animation (0-indexed)
 model.SetAnimation(1);  // Second animation
+
+// Cross-fade between animations
+model.SetAnimationBlend(2, duration: 0.5f);
 
 // Access animation properties
 var anim = model.Animations[0];
@@ -121,18 +139,21 @@ Console.WriteLine($"Duration: {anim.Duration}s, Name: {anim.Name}");
 
 ### Keyframe Structure
 
-Each animation contains per-bone keyframe arrays:
+Each animation is built from per-bone keyframe arrays (internal pipeline data; `Keyframe` exposes `TimeStamp` and `Transform` publicly):
 
 ```
-Animation
- └── BoneKeyframes: Keyframe[][]
+Animation (internal)
+ └── _keyFrames: Keyframe[][]
        └── Keyframe
             ├── TimeStamp: float
-            └── Transform: Transform
-                 ├── Scale: Vector3
-                 ├── Rotation: Quaternion
-                 └── Translation: Vector3
+            ├── Transform: Transform
+            │    ├── Scale: Vector3
+            │    ├── Rotation: Quaternion
+            │    └── Translation: Vector3
+            └── Interpolate(other, factor) → Transform
 ```
+
+`Transform` also provides `AsMatrix()` and `Interpolate(other, factor)`.
 
 ## ModelMesh
 
@@ -163,7 +184,7 @@ Bone transforms are computed in `AnimatedModel.Update(deltaTime)`:
 1. **Interpolate** keyframes for each bone based on elapsed time
 2. **Apply** local bone transforms (scale, rotation, translation)
 3. **Propagate** transforms down the bone hierarchy (parent × child)
-4. **Combine** with `InverseGlobalTransform` offsets for final world-space matrices
+4. **Combine** with `InverseGlobalTransform` for final world-space matrices
 5. Store results in `FinalBoneMatrices[]` for the shader
 
 The shader applies skinning using the 4 bone IDs and weights per vertex:

@@ -6,6 +6,13 @@ Phoenix provides audio playback via OpenAL with a pluggable decoder system.
 
 All audio operations use the static `SoundManager` class. It is initialized automatically by `PhoenixGame` during startup.
 
+```csharp
+SoundManager.Initialize();  // Manual init (only needed outside PhoenixGame)
+SoundManager.Shutdown();    // Release OpenAL context
+```
+
+`Initialize()` is called automatically by `PhoenixGame`; `Shutdown()` releases the OpenAL device when you are done.
+
 ### Loading Sounds
 
 ```csharp
@@ -181,7 +188,7 @@ public class MyGame : PhoenixGame
     protected override void Update(double dt)
     {
         // Play explosion at cursor position
-        if (InputManager.KeyDownOnce(Key.Space))
+        if (Input.KeyDownOnce(Key.Space))
         {
             var instance = SoundManager.Play3D(
                 _explosionSound,

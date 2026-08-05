@@ -113,6 +113,18 @@ Gizmos.AddVolume(cylinder, new Vector3(1, 1, 0));
 Gizmos.AddVolume(frustum, new Vector3(1, 0.5f, 0.5f));
 ```
 
+### Capsules
+
+```csharp
+// Capsule from two endpoint positions
+Gizmos.AddCapsule(
+    new Vector3(0, 0, 0),   // point A
+    new Vector3(0, 2, 0),   // point B
+    0.5f,                   // radius
+    new Vector3(0, 1, 1)    // color
+);
+```
+
 ### Axis Lines
 
 Draw coordinate axes at the origin:
@@ -152,6 +164,7 @@ Gizmos.AddVolume(sphere, new Vector3(0, 1, 0), hit: true);
 | Sphere | `GGSphere` | 64×3 circles | 192 edges |
 | Cylinder | `GGCylinder` | 64×3 circles + 4 vertical | 196 edges |
 | Plane | `GGPlane` | 4 | 5 (rectangle + diagonal) |
+| Capsule | — | — | — |
 
 ## Complete Example
 

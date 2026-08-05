@@ -35,13 +35,21 @@ UI.DrawImg("textures/sprite-sheet",
     new Vector2(0, 0),       // UV min
     new Vector2(0.5f, 1f));  // UV max (draws right half only)
 
-// From a GLTexture object
-UI.DrawImg(myTexture, new Vector2(100, 100), new Vector2(128, 128));
+// From a GLTexture object (UV crop required)
+UI.DrawImg(myTexture,
+    new Vector2(100, 100),   // screen position
+    new Vector2(128, 128),   // screen size
+    new Vector2(0, 0),       // UV min
+    new Vector2(1, 1));      // UV max
 
-// From raw OpenGL handle
+// From raw OpenGL handle with UV cropping
 UI.DrawImg(myTexture.Handle, new Vector2(256, 256),
-    new Vector2(50, 50), new Vector2(64, 64),
-    new Vector2(200, 200), new Vector2(100, 100));
+    new Vector2(0, 0), new Vector2(1, 1));
+
+// From raw OpenGL handle with explicit source region
+UI.DrawImg(myTexture.Handle, new Vector2(256, 256),
+    new Vector2(50, 50), new Vector2(64, 64),   // src position + size in texels
+    new Vector2(200, 200), new Vector2(100, 100));  // dst position + size on screen
 ```
 
 ### Simple Buttons
@@ -74,6 +82,8 @@ protected override void RenderUI()
 Phoenix loads Cascadia Mono at sizes 10-100 in 1px steps by default. Load additional fonts:
 
 ```csharp
+UI.LoadDefaultFont();  // Re-load the default Cascadia Mono set
+
 // Load a custom TTF font
 UI.LoadFontTTF("fonts/myfont.ttf", new int[] { 16, 24, 32, 48 });
 

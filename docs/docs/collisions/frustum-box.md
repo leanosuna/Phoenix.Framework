@@ -37,9 +37,6 @@ frustum.Update(Camera.View * Camera.Projection);
 ### Containment Tests
 
 ```csharp
-// Point in frustum?
-ContainmentType type = frustum.Contains(point);
-
 // Sphere in frustum?
 ContainmentType type = frustum.Contains(sphere);
 // Returns: Contains (fully inside), Intersects (partially inside), Disjoint (fully outside)
@@ -50,6 +47,8 @@ ContainmentType type = frustum.Contains(aabb);
 // Frustum vs frustum?
 ContainmentType type = frustum.Contains(otherFrustum);
 ```
+
+> Note: `frustum.Contains(point)` exists but is currently unimplemented (always returns `Disjoint`). Use the sphere/AABB overloads for point queries, e.g. `frustum.Contains(new BoundingSphere(point, 0f))`.
 
 ### Intersection Tests
 
@@ -79,12 +78,9 @@ An axis-aligned box defined by min and max corners.
 
 ```csharp
 var aabb = new AxisAlignedBoundingBox(
-    new Vector3(-1, -1, -1),  // Min corner
-    new Vector3(1, 1, 1)       // Max corner
+    new Vector3(0, 0, 0),  // Center
+    new Vector3(2, 2, 2)   // Size (width, height, depth)
 );
-
-// From points
-var aabb = AxisAlignedBoundingBox.CreateFromPoints(points);
 
 // From sphere
 var aabb = AxisAlignedBoundingBox.CreateFromSphere(sphere);
@@ -128,14 +124,16 @@ float? dist = aabb.Intersects(ray);
 
 ### Transform
 
+AABBs are axis-aligned and cannot be transformed by an arbitrary matrix. Reposition with `Update()`, or convert to an OBB for oriented transforms:
+
 ```csharp
-var transformed = aabb.Transform(worldMatrix);
+var obb = OrientedBoundingBox.FromAABB(aabb);
 ```
 
 ### Update
 
 ```csharp
-aabb.Update(newPosition);  // Move the box
+aabb.Update(newPosition);  // Move the box (recomputes Min/Max)
 ```
 
 ## OrientedBoundingBox (OBB)
@@ -241,8 +239,7 @@ var playerCylinder = new BoundingCylinder
 {
     Position = playerPosition,
     Radius = 0.5f,
-    HalfHeight = 1.8f,
-    IsXZAligned = true
+    HalfHeight = 1.8f
 };
 
 // Check if cylinder intersects any terrain triangle
@@ -256,6 +253,8 @@ foreach (var terrainTriangle in terrainTriangles)
     }
 }
 ```
+
+> Note: `IsXZAligned` is read-only (computed from `Rotation`). To orient a cylinder, pass a rotation via `Update(Matrix4x4 rotation)` or the constructor's rotation path.
 
 ## See Also
 

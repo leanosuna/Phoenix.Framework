@@ -113,7 +113,7 @@ protected override void Update(double dt)
     // Mouse wheel zoom
     float scroll = Input.MouseWheelValue;
     if (scroll != 0)
-        Camera.FOV = MathHelper.Clamp(Camera.FOV + scroll, 0.1f, MathF.PI / 2f);
+        Camera.FOV = Math.Clamp(Camera.FOV + scroll, 0.1f, MathF.PI / 2f);
 }
 ```
 

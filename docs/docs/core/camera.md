@@ -30,7 +30,7 @@ Camera = new FreeCamera(
     new Vector3(0, 5, -10),         // Position
     0,                              // Yaw (radians)
     -MathF.PI / 4,                  // Pitch (radians)
-    MathF.PI / 4,                   // Max pitch (prevents flipping)
+    MathF.PI / 4,                   // FOV (radians)
     0.1f,                           // Near plane
     1000f,                          // Far plane
     WindowWidth / (float)WindowHeight  // Aspect ratio
@@ -60,8 +60,10 @@ camera.MoveSpeed = 15f;  // Base movement speed
 Mouse look is enabled by default (`MouseAim = true`). Mouse delta is automatically applied to yaw and pitch each frame.
 
 ```csharp
-camera.MouseSensitivity = 0.002f;  // Override default (0.001f)
+Input.MouseSensitivity = 0.002f;  // Override default (0.001f)
 ```
+
+`MouseSensitivity` lives on `Input` (see [Input](input.md)), not on the camera.
 
 ### Manual Yaw/Pitch Keys
 
@@ -84,7 +86,7 @@ Call `Update()` every frame in your `Update()` method:
 ```csharp
 protected override void Update(double dt)
 {
-    Camera.Update((float)dt);
+    Camera.Update(dt);
 }
 ```
 
@@ -112,7 +114,6 @@ This processes:
 | `Projection` | `Matrix4x4` | Projection matrix (set each frame) |
 | `MoveSpeed` | `float` | Movement speed (default 10) |
 | `MouseAim` | `bool` | Whether to process mouse delta (default true) |
-| `MouseSensitivity` | `float` | Mouse sensitivity (default 0.001) |
 
 ## Camera Usage
 
@@ -140,15 +141,15 @@ public class OrbitCamera : BaseCamera
 {
     public float Distance;
 
-    public OrbitCamera(PhoenixGame game, Vector3 target, float distance,
+    public OrbitCamera(Vector3 position, Vector3 target, float distance,
         float yaw, float pitch, float fov, float nearPlane, float farPlane,
         float aspectRatio)
-        : base(game, target, distance, yaw, pitch, fov, nearPlane, farPlane, aspectRatio)
+        : base(position, yaw, pitch, fov, nearPlane, farPlane, aspectRatio)
     {
         Distance = distance;
     }
 
-    public override void Update(float deltaTime)
+    public override void Update(double deltaTime)
     {
         // Custom orbit logic
         CalculateVectors();
@@ -157,6 +158,8 @@ public class OrbitCamera : BaseCamera
     }
 }
 ```
+
+`BaseCamera` takes position/yaw/pitch/fov/planes/aspect — only `MouseCamera` and its subclasses take a `PhoenixGame` reference (for input access).
 
 ## See Also
 
