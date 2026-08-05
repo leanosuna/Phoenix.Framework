@@ -5,6 +5,7 @@
 
 SKILLS.md
 AGENTS.md
+.vscode/
 
 # dotenv files
 .env

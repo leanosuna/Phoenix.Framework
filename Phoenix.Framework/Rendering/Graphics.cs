@@ -5,6 +5,7 @@ using Silk.NET.Input;
 using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 using Silk.NET.Windowing;
+using Silk.NET.Windowing.Glfw;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -36,31 +37,64 @@ namespace Phoenix.Framework.Rendering
             RenderViewport = new RenderViewport(game);
         }
         #region Window
-        public void SetResolution(Vector2 size, bool fullscreen = true)
+        public void SetFullscreen(bool value)
         {
-            if (fullscreen)
+            if (!GlfwWindowing.IsViewGlfw(_window))
             {
-                _window.WindowState = WindowState.Fullscreen;
+                _window.WindowState = value ? WindowState.Fullscreen : WindowState.Normal;
+                return;
+            }
+
+            if (value)
+            {
+                unsafe
+                {
+                    var api = GlfwWindowing.GetExistingApi(_window);
+                    var winHandle = GlfwWindowing.GetHandle(_window);
+
+                    var monitors = api.GetMonitors(out var count);
+                    Silk.NET.GLFW.Monitor* best = null;
+                    int bestRefresh = 0;
+                    for (int i = 0; i < count; i++)
+                    {
+                        var mode = api.GetVideoMode(monitors[i]);
+                        if (mode->RefreshRate > bestRefresh)
+                        {
+                            bestRefresh = mode->RefreshRate;
+                            best = monitors[i];
+                        }
+                    }
+
+                    if (best != null)
+                    {
+                        var mode = api.GetVideoMode(best);
+                        api.SetWindowMonitor(winHandle, best, 0, 0, mode->Width, mode->Height, mode->RefreshRate);
+                    }
+                }
             }
             else
             {
-                _window.WindowState = WindowState.Normal;
+                SetWindowed(new Vector2(1280, 720), true);
             }
-            _window.Position = Vector2D<int>.Zero;
-            _window.Size = size.To2Di();
         }
-        public void SetResolution(Vector2 size, Vector2 position, bool fullscreen = true)
+        public void SetMaximized()
         {
-            if (fullscreen)
-            {
-                _window.WindowState = WindowState.Fullscreen;
-            }
-            else
-            {
-                _window.WindowState = WindowState.Normal;
-            }
-            _window.Position = position.To2Di();
+            _window.WindowState = WindowState.Maximized;
+            
+        }
+        public void SetWindowed(Vector2 size, bool border = true)
+        {
+            _window.WindowState = WindowState.Normal;
+            _window.Position = new Vector2D<int>(0, 0);
             _window.Size = size.To2Di();
+            _window.WindowBorder = border? WindowBorder.Resizable : WindowBorder.Hidden;
+        }
+        public void SetWindowed(Vector2 size, Vector2 pos, bool border = true)
+        {
+            _window.WindowState = WindowState.Normal;
+            _window.Position = pos.To2Di();
+            _window.Size = size.To2Di();
+            _window.WindowBorder = border? WindowBorder.Resizable : WindowBorder.Hidden;
         }
         public void SetWindowBorder(WindowBorder type)
         {
