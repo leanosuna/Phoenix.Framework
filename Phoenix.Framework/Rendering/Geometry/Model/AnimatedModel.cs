@@ -23,7 +23,6 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
         private Animation? _blendFromAnim;
         private float _blendFactor;
         private float _blendDuration = 0.25f;
-        private Matrix4x4[] _blendTemp = [];
 
         public struct BoneWorldTransform
         {
@@ -57,7 +56,10 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
             _blendFromAnim = Animations[_selectedAnimation];
             if (_blendFromMatrices.Length != BoneCount)
                 _blendFromMatrices = new Matrix4x4[BoneCount];
-            Array.Copy(FinalBoneMatrices, _blendFromMatrices, BoneCount);
+            if (FinalBoneMatrices.Length == BoneCount)
+                Array.Copy(FinalBoneMatrices, _blendFromMatrices, BoneCount);
+            else
+                Array.Fill(_blendFromMatrices, Matrix4x4.Identity);
 
             _selectedAnimation = index;
             _blendFactor = 0;
@@ -69,6 +71,9 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
             if(FinalBoneMatrices.Length == 0)
                 FinalBoneMatrices = new Matrix4x4[BoneCount];
 
+            var animation = Animations[_selectedAnimation];
+            animation.Update(deltaTime, FinalBoneMatrices);
+
             if (_blendFromAnim != null)
             {
                 _blendFactor += deltaTime / _blendDuration;
@@ -77,25 +82,11 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
                     _blendFromAnim = null;
                     _blendFactor = 0;
                 }
-            }
-
-            if (_blendFromAnim != null)
-            {
-                if (_blendTemp.Length != BoneCount)
-                    _blendTemp = new Matrix4x4[BoneCount];
-
-                _blendFromAnim.Update(deltaTime, _blendTemp);
-
-                var animation = Animations[_selectedAnimation];
-                animation.Update(deltaTime, FinalBoneMatrices);
-
-                for (int b = 0; b < BoneCount; b++)
-                    FinalBoneMatrices[b] = Matrix4x4.Lerp(_blendTemp[b], FinalBoneMatrices[b], _blendFactor);
-            }
-            else
-            {
-                var animation = Animations[_selectedAnimation];
-                animation.Update(deltaTime, FinalBoneMatrices);
+                else
+                {
+                    for (int b = 0; b < BoneCount; b++)
+                        FinalBoneMatrices[b] = Matrix4x4.Lerp(_blendFromMatrices[b], FinalBoneMatrices[b], _blendFactor);
+                }
             }
 
             if(EnableBoneWorldTransforms)

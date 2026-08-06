@@ -24,12 +24,33 @@ namespace Phoenix.Framework.Collisions
             if (!File.Exists(_path))
                 return new List<SerializableVolume>();
 
-            var json = File.ReadAllText(_path);
-            var array = JsonNode.Parse(json)!.AsArray();
+            JsonNode? parsed;
+            try
+            {
+                parsed = JsonNode.Parse(File.ReadAllText(_path));
+            }
+            catch (JsonException)
+            {
+                return new List<SerializableVolume>();
+            }
+
+            if (parsed is not JsonArray array)
+                return new List<SerializableVolume>();
+
             var list = new List<SerializableVolume>();
 
             foreach (var node in array)
-                list.Add(SerializableVolume.Deserialize(node!.AsObject()));
+            {
+                try
+                {
+                    if (node is JsonObject obj)
+                        list.Add(SerializableVolume.Deserialize(obj));
+                }
+                catch (Exception)
+                {
+                    // Skip malformed entries instead of aborting the whole load
+                }
+            }
 
             return list;
         }

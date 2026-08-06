@@ -59,8 +59,6 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
                         }
                     }
 
-                    var tv = vertices[0];
-                    
                     meshes.Add(new ModelMesh(gl, meshName, vertices, indices, transform, isAnimated, tangents, saveVertexData));
                 }
 
@@ -150,15 +148,6 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
                     Parts = parts,
                     TextureNames = texList
                 };
-        }
-
-        private static int TabCount(List<AnimatorNode> nodes, AnimatorNode node)
-        {
-            if (node.ParentID == -1 || node.ParentID == 0)
-                return 0;
-
-            return TabCount(nodes, nodes[node.ParentID]) + 1;
-
         }
     }
 }

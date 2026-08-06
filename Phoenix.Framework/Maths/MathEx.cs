@@ -116,7 +116,29 @@ namespace Phoenix.Framework.Maths
             var denom = a * e - b * b;
             if (MathF.Abs(denom) < 1e-12f)
             {
-                return (p1, p2);
+                // Lines are parallel (or degenerate): closest segment is
+                // perpendicular to both lines
+                if (a <= 1e-12f && e <= 1e-12f)
+                    return (p1, p2);
+
+                if (a <= 1e-12f)
+                {
+                    var t2p = f / e;
+                    return (p1, p2 + t2p * d2);
+                }
+
+                if (e <= 1e-12f)
+                {
+                    var t1p = -c / a;
+                    return (p1 + t1p * d1, p2);
+                }
+
+                // Closest point on line 2 to line 1, then project back onto line 1
+                var t2q = f / e;
+                var p2q = p2 + t2q * d2;
+                var t1q = Vector3.Dot(p2q - p1, d1) / a;
+                var p1q = p1 + t1q * d1;
+                return (p1q, p2q);
             }
 
             var t1 = (b * f - c * e) / denom;
@@ -169,7 +191,11 @@ namespace Phoenix.Framework.Maths
                 return b + w * (c - b);
             }
 
-            var denom = 1f / (va + vb + vc);
+            var sum = va + vb + vc;
+            if (MathF.Abs(sum) < 1e-12f)
+                return a;   // degenerate triangle
+
+            var denom = 1f / sum;
             var v2 = vb * denom;
             var w2 = vc * denom;
             return a + ab * v2 + ac * w2;

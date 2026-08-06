@@ -3,18 +3,29 @@ namespace Phoenix.Framework.Rendering.Shaders
 {
     public abstract partial class ShaderHelper
     {
-        protected GLShader _shader = default!;
+        protected GLShader _shader = null!;
+
+        private GLShader EnsureShader()
+        {
+            if (_shader is null)
+                throw new InvalidOperationException(
+                    $"ShaderHelper of type {GetType().Name} has no _shader. " +
+                    "Derived classes must assign _shader in their constructor.");
+
+            return _shader;
+        }
+
         public void Use()
         {
-            _shader.SetAsCurrentGLProgram();
+            EnsureShader().SetAsCurrentGLProgram();
         }
         public void AttachUBO(uint bufferHandle, string uniformBlockName, uint binding = 0)
         {
-            _shader.AttachUBO(bufferHandle, uniformBlockName, binding);
+            EnsureShader().AttachUBO(bufferHandle, uniformBlockName, binding);
         }
         public void Dispose()
         {
-            _shader.Dispose();
+            EnsureShader().Dispose();
         }
 
     }

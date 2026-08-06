@@ -10,10 +10,16 @@ namespace Phoenix.Framework.Rendering
             get => _game.FramebufferSize * Scale;
             set
             {
-                if (value.X < 0 || value.Y < 0)
+                if (value.X < 0 || value.Y < 0 ||
+                    float.IsNaN(value.X) || float.IsNaN(value.Y) ||
+                    float.IsInfinity(value.X) || float.IsInfinity(value.Y))
                     return;
 
-                Scale = value / _game.FramebufferSize;
+                var fb = _game.FramebufferSize;
+                if (fb.X <= 0 || fb.Y <= 0)
+                    return;
+
+                Scale = value / fb;
             }
         }
         public float Width => Size.X;

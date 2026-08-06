@@ -47,7 +47,7 @@ namespace Phoenix.Framework
         private bool _renderingHalt = false;
         private bool _firstFrame = true;
 
-        internal RenderTarget _sceneRT;
+        internal RenderTarget _sceneRT = null!;
         public PhoenixGame()
         {
             var options = WindowOptions.Default;

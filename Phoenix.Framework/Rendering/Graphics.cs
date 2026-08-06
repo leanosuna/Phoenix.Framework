@@ -50,6 +50,7 @@ namespace Phoenix.Framework.Rendering
                 unsafe
                 {
                     var api = GlfwWindowing.GetExistingApi(_window);
+                    if (api is null) return;
                     var winHandle = GlfwWindowing.GetHandle(_window);
 
                     var monitors = api.GetMonitors(out var count);
@@ -58,7 +59,7 @@ namespace Phoenix.Framework.Rendering
                     for (int i = 0; i < count; i++)
                     {
                         var mode = api.GetVideoMode(monitors[i]);
-                        if (mode->RefreshRate > bestRefresh)
+                        if (mode != null && mode->RefreshRate > bestRefresh)
                         {
                             bestRefresh = mode->RefreshRate;
                             best = monitors[i];
@@ -68,7 +69,8 @@ namespace Phoenix.Framework.Rendering
                     if (best != null)
                     {
                         var mode = api.GetVideoMode(best);
-                        api.SetWindowMonitor(winHandle, best, 0, 0, mode->Width, mode->Height, mode->RefreshRate);
+                        if (mode != null)
+                            api.SetWindowMonitor(winHandle, best, 0, 0, mode->Width, mode->Height, mode->RefreshRate);
                     }
                 }
             }
@@ -248,7 +250,7 @@ namespace Phoenix.Framework.Rendering
             RenderTarget rt, int srcRTindex, Vector4 srcRect, 
             Vector4 destRect, BlitFramebufferFilter filter = BlitFramebufferFilter.Nearest)
         {
-            CopyTo((rt, srcRTindex, srcRect), (_game._sceneRT, 0, new Vector4(0, 0, _game.FramebufferWidth, _game.FramebufferHeight)), filter);
+            CopyTo((rt, srcRTindex, srcRect), (_game._sceneRT, 0, destRect), filter);
         }
 
         /// <summary>

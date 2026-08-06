@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Phoenix.Framework.Rendering.Textures
 {
-    public class GLTextureCube
+    public class GLTextureCube : IDisposable
     {
         public uint Handle;
 
@@ -106,6 +106,15 @@ namespace Phoenix.Framework.Rendering.Textures
             GL.TexParameter(TextureTarget.TextureCubeMap, GLEnum.TextureMinFilter, (int)GLEnum.Linear);
             GL.TexParameter(TextureTarget.TextureCubeMap, GLEnum.TextureMagFilter, (int)GLEnum.Linear);
 
+        }
+
+        private bool _disposed;
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+
+            GL.DeleteTexture(Handle);
         }
     }
 }

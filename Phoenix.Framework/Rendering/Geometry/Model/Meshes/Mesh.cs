@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 
 namespace Phoenix.Framework.Rendering.Geometry.Model.Meshes
 {
-    public unsafe class Mesh<IndexType>
+    public unsafe class Mesh<IndexType> : IDisposable
         where IndexType : unmanaged
     {
         internal PrimitiveType _type;
@@ -13,6 +13,9 @@ namespace Phoenix.Framework.Rendering.Geometry.Model.Meshes
         internal uint _VAHandle;
         internal uint _indicesLength;
         internal GL GL;
+        private uint _vboHandle;
+        private uint _eboHandle;
+        private bool _disposed;
         public VertexDeclaration VertexDeclaration;
         internal byte[]? _vertexData;
         internal IndexType[]? _indices;
@@ -37,12 +40,17 @@ namespace Phoenix.Framework.Rendering.Geometry.Model.Meshes
             {
                 _drawElementsType = DrawElementsType.UnsignedByte;
             }
+            else
+            {
+                throw new ArgumentException($"Unsupported index type: {typeof(IndexType).Name}. Use uint, ushort or byte.");
+            }
 
 
             _VAHandle = gl.GenVertexArray();
             gl.BindVertexArray(_VAHandle);
 
             var VBHandle = gl.GenBuffer();
+            _vboHandle = VBHandle;
             gl.BindBuffer(BufferTargetARB.ArrayBuffer, VBHandle);
 
             var totalBytes = data.Length;
@@ -57,11 +65,12 @@ namespace Phoenix.Framework.Rendering.Geometry.Model.Meshes
             }
 
             var IBHandle = gl.GenBuffer();
+            _eboHandle = IBHandle;
             gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, IBHandle);
 
             fixed (void* i = indices)
             {
-                gl.BufferData(BufferTargetARB.ElementArrayBuffer, (nuint)(indices.Length * sizeof(uint)), i, BufferUsageARB.StaticDraw);
+                gl.BufferData(BufferTargetARB.ElementArrayBuffer, (nuint)(indices.Length * sizeof(IndexType)), i, BufferUsageARB.StaticDraw);
             }
 
             int attributeByteOffset = 0;
@@ -132,6 +141,16 @@ namespace Phoenix.Framework.Rendering.Geometry.Model.Meshes
                 throw new InvalidOperationException("Index data was not saved. Set saveVertexData to true when creating the mesh.");
 
             return _indices;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+
+            GL.DeleteVertexArray(_VAHandle);
+            GL.DeleteBuffer(_vboHandle);
+            GL.DeleteBuffer(_eboHandle);
         }
     }
 }

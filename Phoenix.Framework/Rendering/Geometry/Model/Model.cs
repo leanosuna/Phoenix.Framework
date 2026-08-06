@@ -6,8 +6,8 @@ namespace Phoenix.Framework.Rendering.Geometry.Model
 {
     public class Model
     {
-        public List<ModelPart> Parts { get; internal set; } = default!;
-        public List<string> TextureNames { get; internal set; } = default!;
+        public List<ModelPart> Parts { get; internal set; } = new();
+        public List<string> TextureNames { get; internal set; } = new();
         public bool HasTextures => TextureNames.Count > 0;
 
         public Model()

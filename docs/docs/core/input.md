@@ -10,7 +10,8 @@ The `Input` class handles keyboard and mouse input via Silk.NET. Supports any nu
 |---|---|---|
 | `MouseSensitivity` | `float` | Mouse delta multiplier (default `0.001f`) |
 | `MouseDelta` | `Vector2` | Accumulated mouse movement this frame, multiplied by sensitivity |
-| `MouseWheelValue` | `float` | Accumulated scroll wheel delta this frame (reset after read) |
+| `MouseWheelPrecise` | `float` | Accumulated scroll (raw float value from os) |
+| `MouseWheelValue` | `int` | Accumulated scroll in discrete steps |
 
 ## Methods
 
@@ -68,10 +69,23 @@ Vector2 delta = Input.MouseDelta;
 
 ### Mouse Wheel
 
+Scroll is exposed in two ways: a precise accumulated value and a whole-notch counter.
+
 ```csharp
-float wheel = Input.MouseWheelValue;
-if (wheel != 0)
-    Camera.FOV -= wheel * 0.05f;
+// Precise scroll delta (fractional, e.g. 0.25, 1.0, -1.5). Never resets.
+float precise = Input.MouseWheelPrecise;
+
+// Whole-notch counter: goes up/down by 1 each time MouseWheelPrecise
+// crosses an integer boundary (e.g. 0.9 -> 1.0 fires one notch).
+int notches = Input.MouseWheelValue;
+```
+
+```csharp
+// Move using precise values
+Camera.Position.Z = Input.MouseWheelPrecise;
+
+// Move using notches
+Camera.Position.Z = Input.MouseWheelValue;
 ```
 
 ### Mouse Sensitivity
@@ -110,10 +124,8 @@ protected override void Update(double dt)
     else
         MoveForward(5f * (float)dt);
 
-    // Mouse wheel zoom
-    float scroll = Input.MouseWheelValue;
-    if (scroll != 0)
-        Camera.FOV = Math.Clamp(Camera.FOV + scroll, 0.1f, MathF.PI / 2f);
+    Camera.Position.Z = Input.MouseWheelValue;
+        
 }
 ```
 
@@ -122,7 +134,8 @@ protected override void Update(double dt)
 - `KeyDown()` returns `true` for the frame a key is first pressed AND every frame it is held.
 - `KeyDownOnce()` returns `true` only on the frame the key is first pressed (edge detection).
 - `MouseDelta` is accumulated each frame and reset on `Update()`.
-- `MouseWheelValue` is reset each frame after being read.
+- `MouseWheelPrecise` accumulates the raw scroll delta and is never reset — track a baseline yourself if you need a per-frame delta.
+- `MouseWheelValue` counts whole notches: it increments when `MouseWheelPrecise` passes an integer going up, and decrements when it passes an integer going down.
 - `MouseDownOnce()` tracks pressed buttons with an internal list, same edge-detect pattern as keys.
 - The constructor initializes all mice to `CursorMode.Raw` by default.
 

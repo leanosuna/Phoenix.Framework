@@ -233,16 +233,14 @@ namespace Phoenix.Framework.Collisions
         /// <returns>Result of testing for containment between this <see cref="BoundingFrustum"/> and specified <see cref="Vector3"/>.</returns>
         public ContainmentType Contains(Vector3 point)
         {
-            var result = default(ContainmentType);
             for (var i = 0; i < PlaneCount; ++i)
             {
-                //if (PlaneHelper.ClassifyPoint(_planes[i], point) > 0)
-                ////if (_planes[i].ClassifyPoint(point) > 0)
-                //{
-                //    return ContainmentType.Disjoint;
-                //}
+                if (PlaneHelper.ClassifyPoint(_planes[i], point) > 0)
+                {
+                    return ContainmentType.Disjoint;
+                }
             }
-            return result;
+            return ContainmentType.Contains;
         }
 
         #endregion
@@ -362,21 +360,45 @@ namespace Phoenix.Framework.Collisions
         /// <returns>Distance at which ray intersects with this <see cref="BoundingFrustum"/> or null if no intersection happens.</returns>
         public float? Intersects(Ray ray)
         {
-            ContainmentType ctype = Contains(ray.Position);
+            // Clip the ray against all 6 frustum planes (normals point inward)
+            float tmin = 0f;
+            float tmax = float.MaxValue;
 
-            switch (ctype)
+            for (var i = 0; i < PlaneCount; ++i)
             {
-                case ContainmentType.Disjoint:
-                    return null;
+                var plane = _planes[i];
+                var dotNormal = Vector3.Dot(plane.Normal, ray.Direction);
+                var distance = Vector3.Dot(plane.Normal, ray.Position) + plane.D;
 
-                case ContainmentType.Contains:
-                    return 0.0f;
-                case ContainmentType.Intersects:
-                    throw new NotImplementedException();
-                default:
-                    throw new ArgumentOutOfRangeException();
+                if (MathF.Abs(dotNormal) < 1e-6f)
+                {
+                    // Ray parallel to the plane: must not be outside it
+                    if (distance > 0f)
+                        return null;
+                    continue;
+                }
+
+                var t = -distance / dotNormal;
+
+                if (dotNormal > 0f)
+                {
+                    // Moving toward the inside: the plane caps the exit distance
+                    tmax = MathF.Min(tmax, t);
+                }
+                else
+                {
+                    // Moving away from the plane: it sets the entry distance
+                    tmin = MathF.Max(tmin, t);
+                }
+
+                if (tmin > tmax)
+                    return null;
             }
 
+            if (tmax < 0f)
+                return null;
+
+            return tmin;
         }
 
         /// <summary>

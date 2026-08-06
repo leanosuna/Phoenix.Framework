@@ -67,6 +67,9 @@ namespace Phoenix.Framework.Rendering.Textures
         }
         private void LoadIntoGL()
         {   
+            if (MipSizes.Length == 0 || MipCount <= 0)
+                throw new Exception("Texture has no mip data");
+
             Size = MipSizes[0];
             
             int internalFormat = Format switch

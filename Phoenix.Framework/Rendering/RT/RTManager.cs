@@ -74,11 +74,14 @@ namespace Phoenix.Framework.Rendering.RT
                 if (depthBuffer.FollowsWindowSize)
                     depthBuffer.Size = _game.FramebufferSize;
 
+                var depthSize = depthBuffer.Size;
+                if (depthSize == Vector2.Zero)
+                    depthSize = rtSize;
+
                 GL.GenRenderbuffers(1, out uint rboDepth);
                 depthBuffer.Handle = rboDepth;
                 GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, rboDepth);
-                //TODO: verify if depthBuffer size necessary
-                GL.RenderbufferStorage(GLEnum.Renderbuffer, depthBuffer.Format, (uint)rtSize.X, (uint)rtSize.Y);
+                GL.RenderbufferStorage(GLEnum.Renderbuffer, depthBuffer.Format, (uint)depthSize.X, (uint)depthSize.Y);
 
                 GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, FramebufferAttachment.DepthStencilAttachment, RenderbufferTarget.Renderbuffer, rboDepth);
 
@@ -97,7 +100,8 @@ namespace Phoenix.Framework.Rendering.RT
             rt.DepthBuffer = depthBuffer!;
             _renderTargets.Add(name.ToLower(CultureInfo.InvariantCulture), rt);
 
-            if (targetTextures.Any(t => t.FollowsWindowSize))
+            if (targetTextures.Any(t => t.FollowsWindowSize)
+                || (depthBuffer is not null && depthBuffer.FollowsWindowSize))
                 _dynamicTargets.Add(rt);
 
 
@@ -127,9 +131,10 @@ namespace Phoenix.Framework.Rendering.RT
 
                 var size = tex.Size;
                 if (tex.FollowsWindowSize)
-                    size = _game.FramebufferSize;
+                    size = _game.FramebufferSize * tex.SizeMultiplier;
 
                 tex.Texture.Resize(size);
+                tex.Size = size;
                 
                 var att = FramebufferAttachment.ColorAttachment0 + i;
                 var cAtt = GLEnum.ColorAttachment0 + i;
@@ -147,9 +152,6 @@ namespace Phoenix.Framework.Rendering.RT
         /// <param name="name">The name of the render target to bind</param>
         internal void RenderTo(RenderTarget target)
         {
-            if(!target.IsBound)
-                throw new Exception($"target not bound (its handle is uint.MaxValue)");
-
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, target.FrameBuffer);
 
             var size = target.RenderTextures[0].Texture.Size;
@@ -192,20 +194,17 @@ namespace Phoenix.Framework.Rendering.RT
                 }
                 
                 var db = rt.DepthBuffer;
-                if (db is not null)
+                if (db is not null && db.FollowsWindowSize)
                 {
-                    if(db.FollowsWindowSize)
-                    {
-                        db.Size = _game.Graphics.RenderViewport.Size;
-                        GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, db.Handle);
-                        GL.RenderbufferStorage(
-                            RenderbufferTarget.Renderbuffer, 
-                            db.Format,
-                            db.Width, 
-                            db.Height);
+                    db.Size = _game.Graphics.RenderViewport.Size;
+                    GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, db.Handle);
+                    GL.RenderbufferStorage(
+                        RenderbufferTarget.Renderbuffer, 
+                        db.Format,
+                        db.Width, 
+                        db.Height);
 
-                        GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0);
-                    }
+                    GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0);
                 }
             }
             GL.BindTexture(TextureTarget.Texture2D, 0);

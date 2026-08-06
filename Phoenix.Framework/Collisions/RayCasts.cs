@@ -11,46 +11,66 @@ namespace Phoenix.Framework.Collisions
             hitPoint = Vector3.Zero;
             hitNormal = Vector3.Zero;
 
-            var invD = new Vector3(1f / ray.Direction.X, 1f / ray.Direction.Y, 1f / ray.Direction.Z);
-            var t0 = (aabbMin.X - ray.Position.X) * invD.X;
-            var t1 = (aabbMax.X - ray.Position.X) * invD.X;
-            var tmin = MathF.Min(t0, t1);
-            var tmax = MathF.Max(t0, t1);
+            const float Epsilon = 1e-6f;
+            var tmin = 0f;
+            var tmax = float.MaxValue;
+            var face = -1;   // axis of the slab hit (0=X, 1=Y, 2=Z)
+            var sign = 1f;   // which side of the slab
 
-            for (int i = 1; i < 3; i++)
+            for (int i = 0; i < 3; i++)
             {
-                var v = i == 1 ? ray.Direction.Y : ray.Direction.Z;
-                var p = i == 1 ? ray.Position.Y : ray.Position.Z;
-                var bMin = i == 1 ? aabbMin.Y : aabbMin.Z;
-                var bMax = i == 1 ? aabbMax.Y : aabbMax.Z;
+                var d = i == 0 ? ray.Direction.X : i == 1 ? ray.Direction.Y : ray.Direction.Z;
+                var p = i == 0 ? ray.Position.X : i == 1 ? ray.Position.Y : ray.Position.Z;
+                var bMin = i == 0 ? aabbMin.X : i == 1 ? aabbMin.Y : aabbMin.Z;
+                var bMax = i == 0 ? aabbMax.X : i == 1 ? aabbMax.Y : aabbMax.Z;
 
-                var invV = 1f / v;
-                var ty0 = (bMin - p) * invV;
-                var ty1 = (bMax - p) * invV;
-                var tymin = MathF.Min(ty0, ty1);
-                var tymax = MathF.Max(ty0, ty1);
+                if (MathF.Abs(d) < Epsilon)
+                {
+                    if (p < bMin || p > bMax)
+                        return false;
+                    continue;
+                }
 
-                if (tymin > tmax || tymax < tmin)
+                var invD = 1f / d;
+                var t0 = (bMin - p) * invD;
+                var t1 = (bMax - p) * invD;
+                if (t0 > t1)
+                    (t0, t1) = (t1, t0);
+
+                if (t0 > tmin)
+                {
+                    tmin = t0;
+                    face = i;
+                    sign = d > 0 ? -1f : 1f;
+                }
+                if (t1 < tmax) tmax = t1;
+
+                if (tmin > tmax)
                     return false;
-
-                if (tymin > tmin) tmin = tymin;
-                if (tymax < tmax) tmax = tymax;
             }
 
-            if (tmin > maxDist || tmax < 0f)
+            if (tmax < 0f || tmin > maxDist)
                 return false;
 
-            hitFraction = tmin >= 0f ? tmin : tmax;
+            // Origin inside the box (or no entry face was found): report the exit point
+            if (tmin <= 0f || face == -1)
+            {
+                if (tmax > maxDist)
+                    return false;
+                hitFraction = tmax;
+                hitPoint = ray.Position + ray.Direction * hitFraction;
+                hitNormal = -Vector3.Normalize(ray.Direction);
+                return true;
+            }
+
+            hitFraction = tmin;
             hitPoint = ray.Position + ray.Direction * hitFraction;
 
-            var eps = 1e-6f;
-            var center = (aabbMin + aabbMax) * 0.5f;
-            var rel = hitPoint - center;
-            var halfExt = (aabbMax - aabbMin) * 0.5f;
-            var dMin = halfExt.X - MathF.Abs(rel.X);
-            var dX = MathF.Abs(rel.X + eps) - halfExt.X;
-            if (dX > 0f) hitNormal = new Vector3(MathF.Sign(rel.X) * dX, 0, 0);
-            hitNormal = Vector3.Normalize(hitNormal);
+            var normal = Vector3.Zero;
+            if (face == 0) normal = new Vector3(sign, 0, 0);
+            else if (face == 1) normal = new Vector3(0, sign, 0);
+            else if (face == 2) normal = new Vector3(0, 0, sign);
+            hitNormal = normal;
             return true;
         }
 
@@ -86,6 +106,9 @@ namespace Phoenix.Framework.Collisions
 
             var toSphere = center - ray.Position;
             var a = Vector3.Dot(ray.Direction, ray.Direction);
+            if (a < 1e-12f)
+                return false;
+
             var b = -2f * Vector3.Dot(ray.Direction, toSphere);
             var c = Vector3.Dot(toSphere, toSphere) - radius * radius;
             var disc = b * b - 4f * a * c;

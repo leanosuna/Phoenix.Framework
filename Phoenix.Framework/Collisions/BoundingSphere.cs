@@ -136,7 +136,7 @@ namespace Phoenix.Framework.Collisions
             if (sqDistance > (sphere.Radius + Radius) * (sphere.Radius + Radius))
                 return ContainmentType.Disjoint;
 
-            if (sqDistance <= (Radius - sphere.Radius) * (Radius - sphere.Radius))
+            if (sqDistance <= (Radius - sphere.Radius) * (Radius - sphere.Radius) && Radius >= sphere.Radius)
                 return ContainmentType.Contains;
 
             return ContainmentType.Intersects;

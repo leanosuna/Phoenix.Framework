@@ -1,5 +1,4 @@
 ﻿using Phoenix.Framework.Rendering.Primitives;
-using Phoenix.Framework.Rendering.Shaders;
 using Phoenix.Framework.Collisions;
 using Phoenix.Framework.Maths;
 using Silk.NET.OpenGL;
@@ -12,7 +11,6 @@ namespace Phoenix.Framework.Rendering.Gizmos
     {
         private readonly GL GL;
         private readonly PhoenixGame game;
-        private readonly GLShader _shader;
         private readonly List<GizmoGeometryInstance> _drawList = new();
         private readonly Primitive _cubeGeometry;
         private readonly Primitive _sphereGeometry;
@@ -21,7 +19,17 @@ namespace Phoenix.Framework.Rendering.Gizmos
         private readonly VertexArrayObject<float, ushort> _lineVAO;
         private readonly uint _lineIndicesLength;
         private ShaderGizmos ShaderGizmos;
-        public bool Enabled { get; set; } = true;
+        private bool _enabled = true;
+        public bool Enabled
+        {
+            get => _enabled;
+            set
+            {
+                _enabled = value;
+                if (!value)
+                    _drawList.Clear();
+            }
+        }
         
         internal Gizmos(PhoenixGame game)
         {
@@ -59,13 +67,8 @@ namespace Phoenix.Framework.Rendering.Gizmos
             if (game.Camera.View == Matrix4x4.Identity || game.Camera.Projection == Matrix4x4.Identity) return;
 
             ShaderGizmos.Use();
-            //_shader.SetAsCurrentGLProgram();
             foreach (var instance in _drawList)
             {
-                //_shader.SetUniform("uWorld", instance.World);
-                //_shader.SetUniform("uColor", instance.Color);
-                //_shader.SetUniform("uHit", instance.Hit);
-
                 ShaderGizmos.World.Set(instance.World);
                 ShaderGizmos.Color.Set(instance.Color);
                 ShaderGizmos.Hit.Set(instance.Hit);
@@ -123,17 +126,23 @@ namespace Phoenix.Framework.Rendering.Gizmos
 
         public void AddPlane(Vector3 position, Vector3 normal, Vector2 size, Vector3 color, bool hit = false)
         {
-            Matrix4x4 world = Matrix4x4.CreateScale(size.X, 0, size.Y);
             if (normal == Vector3.Zero)
                 normal = Vector3.UnitY;
 
             normal = Vector3.Normalize(normal);
-            var yaw = MathF.Atan2(normal.X, normal.Z);
-            var pitch = MathF.Asin(-normal.Y);
-            var rot = MathHelper.RotationMxFromYawPitchRoll(yaw, pitch + MathHelper.PiOver2, 0);
 
-            world *= rot;
-            world *= Matrix4x4.CreateTranslation(position);
+            // Build an orthonormal basis whose Y axis is the plane normal
+            var worldUp = MathF.Abs(normal.Y) < 0.99f ? Vector3.UnitY : Vector3.UnitX;
+            var right = Vector3.Normalize(Vector3.Cross(worldUp, normal));
+            var forward = Vector3.Normalize(Vector3.Cross(normal, right));
+
+            Matrix4x4 rot = new(
+                right.X, right.Y, right.Z, 0,
+                normal.X, normal.Y, normal.Z, 0,
+                forward.X, forward.Y, forward.Z, 0,
+                0, 0, 0, 1);
+
+            var world = Matrix4x4.CreateScale(size.X, 1f, size.Y) * rot * Matrix4x4.CreateTranslation(position);
 
             _drawList.Add(new GizmoGeometryInstance { Draw = _planeGeometry.Draw, World = world, Color = color, Hit = hit });
         }

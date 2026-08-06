@@ -352,9 +352,6 @@ namespace Phoenix.Framework.Collisions
             return isOut ? ContainmentType.Disjoint : ContainmentType.Contains;
         }
 
-        private static readonly Vector3 MaxVector3 = new Vector3(float.MaxValue);
-        private static readonly Vector3 MinVector3 = new Vector3(float.MinValue);
-
         /// <summary>
         ///   Create the enclosing <see cref="AxisAlignedBoundingBox"/> of a <see cref="BoundingSphere"/>.
         /// </summary>
@@ -362,7 +359,7 @@ namespace Phoenix.Framework.Collisions
         /// <returns>A <see cref="AxisAlignedBoundingBox"/> enclosing <paramref name="sphere"/>.</returns>
         public static AxisAlignedBoundingBox CreateFromSphere(BoundingSphere sphere)
         {
-            var size = new Vector3(sphere.Radius);
+            var size = new Vector3(sphere.Radius * 2f);
             return new AxisAlignedBoundingBox(sphere.Center, size);
         }
 

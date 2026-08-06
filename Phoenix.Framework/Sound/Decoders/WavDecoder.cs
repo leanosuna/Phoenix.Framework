@@ -30,8 +30,13 @@ namespace Phoenix.Framework.Sound.Decoders
 
             while (br.BaseStream.Position < br.BaseStream.Length)
             {
+                if (br.BaseStream.Length - br.BaseStream.Position < 8)
+                    break;
+
                 string chunkId = new string(br.ReadChars(4));
                 int chunkSize = br.ReadInt32();
+                if (chunkSize < 0 || br.BaseStream.Position + chunkSize > br.BaseStream.Length)
+                    throw new InvalidDataException("Invalid WAV: corrupt chunk size.");
 
                 switch (chunkId)
                 {
@@ -73,6 +78,9 @@ namespace Phoenix.Framework.Sound.Decoders
 
             if (pcmData == null)
                 throw new InvalidDataException("Invalid WAV: Missing data chunk.");
+
+            if (sampleRate <= 0)
+                throw new InvalidDataException("Invalid WAV: Missing or invalid fmt chunk.");
 
             BufferFormat format = GetFormat(channels, bitsPerSample);
 

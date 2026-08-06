@@ -139,12 +139,12 @@ namespace Phoenix.Framework
         }
 
         [DllImport("user32.dll")]
-        private static extern bool EnumDisplaySettings(string lpszDeviceName, int iModeNum, ref Devmode lpDevMode);
+        private static extern bool EnumDisplaySettings(string? lpszDeviceName, int iModeNum, ref Devmode lpDevMode);
 
         private const int ENUM_CURRENT_SETTINGS = -1;
 
         [StructLayout(LayoutKind.Sequential)]
-        private struct Devmode :IEquatable<Devmode>
+        private struct Devmode
         {
             [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
             public string dmDeviceName;
@@ -178,11 +178,6 @@ namespace Phoenix.Framework
             public int dmReserved2;
             public int dmPanningWidth;
             public int dmPanningHeight;
-
-            public bool Equals(Devmode other)
-            {
-                return false;
-            }
         }
     }
 }

@@ -34,6 +34,12 @@ namespace Phoenix.Framework.Collisions
                 { pushDir.Y = MathF.Sign(toCenter.Y); depth = radius - dY; }
                 else
                 { pushDir.Z = MathF.Sign(toCenter.Z); depth = radius - dZ; }
+
+                // Sphere center exactly at the box center: pick an arbitrary axis
+                if (pushDir == Vector3.Zero)
+                    pushDir = Vector3.UnitY;
+                else
+                    pushDir = Vector3.Normalize(pushDir);
                 return depth > 0;
             }
 
@@ -75,6 +81,10 @@ namespace Phoenix.Framework.Collisions
                 { localPush = new Vector3(0, MathF.Sign(localCenter.Y), 0); pen = dY; }
                 else
                 { localPush = new Vector3(0, 0, MathF.Sign(localCenter.Z)); pen = dZ; }
+
+                if (localPush == Vector3.Zero)
+                    localPush = Vector3.UnitY;
+
                 pushDir = Vector3.Normalize(Vector3.Transform(localPush, obb.Orientation));
                 depth = radius - pen;
                 return depth > 0;

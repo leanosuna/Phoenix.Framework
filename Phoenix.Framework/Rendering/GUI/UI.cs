@@ -14,6 +14,7 @@ namespace Phoenix.Framework.Rendering.GUI
         private GL GL;
         private Dictionary<int, ImFontPtr> _fonts = new Dictionary<int, ImFontPtr>();
         private int _buttonId = 0;
+        private int _fontPushCount = 0;
 
         internal UI(PhoenixGame game)
         {
@@ -73,7 +74,6 @@ namespace Phoenix.Framework.Rendering.GUI
             io.Fonts.ClearTexData();
 
             var first = _fonts.First();
-            ImGui.PushFont(first.Value);
 
             SetFontSize(first.Key);
         }
@@ -91,7 +91,15 @@ namespace Phoenix.Framework.Rendering.GUI
                 return;
             }
 
+            // Pop the previously pushed font so the ImGui font stack stays balanced
+            while (_fontPushCount > 0)
+            {
+                ImGui.PopFont();
+                _fontPushCount--;
+            }
+
             ImGui.PushFont(font);
+            _fontPushCount++;
         }
         /// <summary>
         /// Draws text on the screen without any window or background
@@ -146,8 +154,15 @@ namespace Phoenix.Framework.Rendering.GUI
         }
         public void DrawImg(string name, Vector2 position, Vector2 size, Vector2 uvMin, Vector2 uvMax)
         {
-            uint texID = AssetLoader.LoadTexture(name).Handle;
-            DrawImg(texID, position, size, uvMin, uvMax);
+            try
+            {
+                uint texID = AssetLoader.LoadTexture(name).Handle;
+                DrawImg(texID, position, size, uvMin, uvMax);
+            }
+            catch (Exception e)
+            {
+                ErrorListWindow.Add($"Could not draw texture '{name}': {e.Message}");
+            }
         }
         
         public void DrawImg(GLTexture tex, Vector2 position, Vector2 size, Vector2 uvMin, Vector2 uvMax)
@@ -157,6 +172,8 @@ namespace Phoenix.Framework.Rendering.GUI
 
         public void DrawImg(uint texId, Vector2 texSize, Vector2 srcPosition, Vector2 srcSize, Vector2 dstPosition, Vector2 dstSize)
         {
+            if (texSize.X == 0 || texSize.Y == 0)
+                return;
 
             var uvMin = srcPosition / texSize;
             var uvMax = (srcPosition + srcSize) / texSize;

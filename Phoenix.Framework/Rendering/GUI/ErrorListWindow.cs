@@ -11,7 +11,7 @@ namespace Phoenix.Framework.Rendering.GUI
     {
         public static bool Show { get; set; } = false;
         private static Dictionary<string, ErrorItem> _errors = new();
-        private static UI _ui;
+        private static UI _ui = null!;
                 
         public static void Add(
             string error,
@@ -42,15 +42,16 @@ namespace Phoenix.Framework.Rendering.GUI
         }
         internal static void Update(float deltaTime)
         {
-            var items = _errors.Values;
-            
-            foreach (var item in items)
+            foreach (var item in _errors.Values)
                 item.CurrentTime += deltaTime;
             
         }
         internal static void Render()
         {
             if (!Show)
+                return;
+
+            if (_ui is null)
                 return;
 
             _ui.SetFontSize(15);

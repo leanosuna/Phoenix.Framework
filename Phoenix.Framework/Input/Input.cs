@@ -13,7 +13,9 @@ namespace Phoenix.Framework.Inputs
 
         public float MouseSensitivity = .001f;
         public Vector2 MouseDelta = Vector2.Zero;
-        public float MouseWheelValue = 0;
+        public float MouseWheelPrecise = 0;
+        public int MouseWheelValue = 0;
+        
         public Input(PhoenixGame game)
         {
             _game = game;
@@ -59,7 +61,16 @@ namespace Phoenix.Framework.Inputs
 
         public void OnMouseWheel(IMouse mouse, ScrollWheel scrollWheel)
         {
-            MouseWheelValue -= scrollWheel.Y;
+            var previous = MouseWheelPrecise; 
+            MouseWheelPrecise += scrollWheel.Y;
+            if (MouseWheelPrecise < previous)
+            {
+                MouseWheelValue--;
+            }
+            if (MouseWheelPrecise > previous)
+            {
+                MouseWheelValue++;
+            }
         }
 
         private List<Key> _keysDown = new List<Key>();

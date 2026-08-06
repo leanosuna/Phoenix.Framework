@@ -18,6 +18,13 @@ namespace Phoenix.Framework.AssetImport
         private static readonly Dictionary<string, GLShader> _loadedShaders = new();
         private static AssetManifest _assetManifest = default!;
         private static GL GL = default!;
+
+        private static void EnsureInitialized()
+        {
+            if (GL is null || _assetManifest is null)
+                throw new InvalidOperationException("AssetLoader.Init(game, ...) must be called before loading assets.");
+        }
+
         public static void Init(PhoenixGame game, string contentPath = ContentDefaultPath, string manifestPath = ManifestDefaultPath)
         { 
             GL = game.GL;
@@ -32,6 +39,7 @@ namespace Phoenix.Framework.AssetImport
         
         public static Model LoadModel(string name, bool saveVertexData = true)
         {
+            EnsureInitialized();
             var absolutePath = AssetAbsolutePath(name);
             if (!_loadedModels.TryGetValue(absolutePath, out var model))
             {
@@ -49,17 +57,20 @@ namespace Phoenix.Framework.AssetImport
 
         public static GLTexture LoadTexture(string name)
         {
+            EnsureInitialized();
             var absolutePath = AssetAbsolutePath(name);
             return LoadTextureAbs(absolutePath);
         }
         public static GLShader LoadShader(string name)
         {
+            EnsureInitialized();
             var path = ShaderAbsolutePath(name);
             return LoadShaderAbs(path.absVert, path.absFrag);
         }
 
         public static GLTextureCube LoadTextureCube(string[] names)
         {
+            EnsureInitialized();
             if (names.Length != 6)
                 throw new ArgumentOutOfRangeException($"paths count {names.Length} must be 6");
 
@@ -94,6 +105,7 @@ namespace Phoenix.Framework.AssetImport
             if(!_loadedShaders.TryGetValue(name, out var shader))
             {
                 shader = new GLShader(GL, vert, frag);
+                _loadedShaders[name] = shader;
             }
 
             return shader;

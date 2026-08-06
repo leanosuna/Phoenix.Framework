@@ -52,6 +52,7 @@ namespace Phoenix.Framework.Collisions
                 UpdateTranslation();
                 UpdateInverseRotation();
                 UpdateTransform();
+                CalculateWorld();
             }
         }
 
@@ -66,6 +67,7 @@ namespace Phoenix.Framework.Collisions
                 _radius = value;
                 UpdateScale();
                 UpdateTransform();
+                CalculateWorld();
             }
         }
 
@@ -80,6 +82,7 @@ namespace Phoenix.Framework.Collisions
                 _halfHeight = value;
                 UpdateScale();
                 UpdateTransform();
+                CalculateWorld();
             }
         }
 
@@ -95,6 +98,7 @@ namespace Phoenix.Framework.Collisions
                 IsXZAligned = _rotation.Equals(Matrix4x4.Identity);
                 UpdateInverseRotation();
                 UpdateTransform();
+                CalculateWorld();
             }
         }
 
@@ -126,6 +130,7 @@ namespace Phoenix.Framework.Collisions
             UpdateScale();
             UpdateInverseRotation();
             UpdateTransform();
+            CalculateWorld();
         }
 
         /// <summary>
@@ -206,32 +211,36 @@ namespace Phoenix.Framework.Collisions
             {
                 t1 = (-1 - y0) / yt;
                 t2 = (1 - y0) / yt;
+                if (t1 > t2)
+                    (t1, t2) = (t2, t1);
             }
 
             float a = xt * xt + zt * zt,
                 b = 2 * x0 * xt + 2 * z0 * zt,
                 c = x0 * x0 + z0 * z0 - 1;
 
+            if (a < 1e-12f)
+            {
+                // Ray parallel to the cylinder axis: hit iff the xz-projection
+                // is within the unit circle and the forward ray reaches the slab.
+                if (x0 * x0 + z0 * z0 > 1f) return false;
+                return t2 >= 0;
+            }
+
             var root = b * b - 4 * a * c;
 
             if (root < 0) return false;
-            if (root == 0)
-            {
-                var t = -b / (2 * a);
-                return t >= t1 && t <= t2;
-            }
-            var up = -b;
-            var down = 2 * a;
+
             var sqrt = MathF.Sqrt(root);
+            float t3 = (-b - sqrt) / (2 * a);
+            float t4 = (-b + sqrt) / (2 * a);
 
-            float t3, t4;
-            t3 = (up - sqrt) / down;
-            t4 = (up + sqrt) / down;
-
-            if (t3 <= t1 && t4 >= t2) return true;
-            if (t3 >= t1 && t3 <= t2) return true;
-            if (t4 >= t1 && t4 <= t2) return true;
-            return false;
+            // [t3, t4] = t-range inside the infinite cylinder side
+            // [t1, t2] = t-range inside the slab
+            // hit iff the intervals overlap at t >= 0
+            var hitStart = MathF.Max(MathF.Max(t3, t1), 0f);
+            var hitEnd = MathF.Min(t4, t2);
+            return hitStart <= hitEnd;
         }
 
         /// <summary>
@@ -329,6 +338,12 @@ namespace Phoenix.Framework.Collisions
                 return true;
 
             // Check if the closest point to the center of the sphere belongs to the cylinder
+            var radialSq = centerToCenter.LengthSquared();
+            if (radialSq < 1e-12f)
+            {
+                // Sphere center directly over the cap center: compare against cap disc
+                return distanceY - _halfHeight <= sphereRadius;
+            }
             centerToCenter = Vector3.Normalize(centerToCenter);
             centerToCenter *= _radius;
             centerToCenter.Y = _halfHeight * MathF.Sign(uvwSphereCenter.Y - _position.Y);
@@ -400,7 +415,10 @@ namespace Phoenix.Framework.Collisions
                 t = -md / nd;
                 // Keep intersection if Dot(S(t) - p, S(t) - p) <= r^2
                 if (k + t * (2.0f * mn + t * nn) <= 0.0f)
+                {
+                    q = pointA + t * n;
                     return q;
+                }
                 else
                     return null;
             }
@@ -412,7 +430,10 @@ namespace Phoenix.Framework.Collisions
                 t = (dd - md) / nd;
                 // Keep intersection if Dot(S(t) - q, S(t) - q) <= r^2
                 if (k + dd - 2.0f * md + t * (2.0f * (mn - nd) + t * nn) <= 0.0f)
+                {
+                    q = pointA + t * n;
                     return q;
+                }
                 else
                     return null;
             }
@@ -433,10 +454,14 @@ namespace Phoenix.Framework.Collisions
         {
             if (IsXZAligned)
                 return IntersectsXZAligned(box);
-            else
-                // TODO: Implement the method from
-                // https://github.com/teikitu/teikitu_release/blob/master/teikitu/src/TgS%20COLLISION/TgS%20Collision%20-%20F%20-%20Cylinder-Box.c_inc
-                throw new NotImplementedException();
+
+            // Rotated cylinders: conservative test using the enclosing sphere of the cylinder
+            var enclosingRadius = MathF.Sqrt(_radius * _radius + _halfHeight * _halfHeight);
+            var sphere = new BoundingSphere(_position, enclosingRadius);
+            if (!sphere.Intersects(box))
+                return BoxCylinderIntersection.None;
+
+            return BoxCylinderIntersection.Intersecting;
         }
 
         /// <summary>
@@ -525,9 +550,8 @@ namespace Phoenix.Framework.Collisions
         /// </summary>
         private void UpdateTransform()
         {
-            Matrix4x4.Invert(Transform, out var invTransform);
             Transform = _scale * _rotation * _translation;
-            _inverseTransform = invTransform;
+            Matrix4x4.Invert(Transform, out _inverseTransform);
         }
     }
 

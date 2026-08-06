@@ -25,6 +25,8 @@ namespace Phoenix.Framework.Rendering.Shaders
 
             uint vertex = LoadShader(ShaderType.VertexShader, vertexPath);
             uint fragment = LoadShader(ShaderType.FragmentShader, fragmentPath);
+            if (vertex == uint.MaxValue || fragment == uint.MaxValue)
+                throw new Exception("Shader compilation failed, see ErrorListWindow for details");
 
             _handle = GL.CreateProgram();
             GL.AttachShader(_handle, vertex);
@@ -33,7 +35,10 @@ namespace Phoenix.Framework.Rendering.Shaders
             GL.GetProgram(_handle, GLEnum.LinkStatus, out var status);
             if (status == 0)
             {
-                throw new Exception($"Program failed to link with error: {GL.GetProgramInfoLog(_handle)}");
+                var linkError = GL.GetProgramInfoLog(_handle);
+                GL.DeleteProgram(_handle);
+                _handle = 0;
+                throw new Exception($"Program failed to link with error: {linkError}");
             }
 
             GL.DetachShader(_handle, vertex);
@@ -89,6 +94,7 @@ namespace Phoenix.Framework.Rendering.Shaders
             {
                 case bool b: GL.ProgramUniform1(_handle, location, b ? 1 : 0); break;
                 case int i: GL.ProgramUniform1(_handle, location, i); break;
+                case uint u: GL.ProgramUniform1(_handle, location, u); break;
                 case float f: GL.ProgramUniform1(_handle, location, f); break;
                 case double d: GL.ProgramUniform1(_handle, location, d); break;
                 case Vector2 v2: GL.ProgramUniform2(_handle, location, v2); break;
@@ -182,7 +188,14 @@ namespace Phoenix.Framework.Rendering.Shaders
         }
         public void Dispose()
         {
+            if (_handle == 0)
+                return;
+
+            if (_currentShader == _handle)
+                _currentShader = uint.MaxValue;
+
             GL.DeleteProgram(_handle);
+            _handle = 0;
         }
 
         private uint LoadShader(ShaderType type, string path)
@@ -192,9 +205,11 @@ namespace Phoenix.Framework.Rendering.Shaders
             uint handle = GL.CreateShader(type);
             GL.ShaderSource(handle, src);
             GL.CompileShader(handle);
-            string infoLog = GL.GetShaderInfoLog(handle);
-            if (!string.IsNullOrWhiteSpace(infoLog))
+            GL.GetShader(handle, ShaderParameterName.CompileStatus, out var status);
+            if (status == 0)
             {
+                string infoLog = GL.GetShaderInfoLog(handle);
+                GL.DeleteShader(handle);
                 ErrorListWindow.Add($"Error compiling shader of type {type}, failed with error {infoLog}");
                 return uint.MaxValue;
             }

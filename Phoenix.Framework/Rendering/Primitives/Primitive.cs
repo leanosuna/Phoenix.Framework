@@ -10,9 +10,9 @@ namespace Phoenix.Framework.Rendering.Primitives;
 
 public abstract class Primitive
 {
-    private Mesh<uint> _mesh;
-    protected static GL GL;
-    protected PrimitiveInfo _primitiveInfo;
+    private Mesh<uint> _mesh = null!;
+    protected static GL GL = null!;
+    protected PrimitiveInfo _primitiveInfo = null!;
     public static void SetGL(GL gl)
     {
         GL = gl;
@@ -26,6 +26,9 @@ public abstract class Primitive
     public uint[] GetIndexData() => _mesh.GetIndexData();
     protected void BuildMesh()
     {
+        if (GL is null)
+            throw new InvalidOperationException("Primitive.SetGL(gl) must be called before creating primitives.");
+
         var vdd = new VertexDeclarationBuilder().AddVertex3f();
 
         var uv = _primitiveInfo.Uv;
@@ -76,8 +79,15 @@ public abstract class Primitive
             vbb = VertexBufferBuilder.BuildPosUvNormTanBt();
             VertexIndexBufferPosUvNormTaBt(ref vbb, ref indices);
         }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Unsupported vertex layout: Uv={uv}, Normals={n}, Tangents={t}, Bitangents={bt}");
+        }
 
         var vertices = vbb.Build();
+        if (indices.Length == 0)
+            throw new InvalidOperationException("No indices generated for the requested vertex layout");
         _mesh = new Mesh<uint>(GL, _primitiveInfo.MeshPrimitiveType, vd, indices, vertices, _primitiveInfo.SaveVertices);
     }
 

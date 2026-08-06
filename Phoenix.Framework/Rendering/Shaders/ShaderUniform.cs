@@ -10,19 +10,23 @@ namespace Phoenix.Framework.Rendering.Shaders
     {
         int _location;
         private GLShader _shader;
+        bool _notFound = false;
         public ShaderUniform(GLShader shader, string name, bool throwIfNotFound = true)
         {
             _shader = shader;
             _location = shader.GetUniformLocation(name);
-            if (_location == -1 && throwIfNotFound)
+            if (_location == -1)
             {
-                ErrorListWindow.Add($"Uniform [{name}] not found");
-                return;
+                _notFound = true;
+                if (throwIfNotFound)
+                    ErrorListWindow.Add($"Uniform [{name}] not found");
             }
         }
 
         public void Set(Type value)
         {
+            if (_notFound)
+                return;
             _shader.SetUniform(_location, value);
         }
     }

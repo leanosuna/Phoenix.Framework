@@ -33,6 +33,9 @@ namespace Phoenix.Framework.Rendering.Geometry.Model.Animations
 
         public void Update(float deltaTime, Matrix4x4[] finalBoneMatrices)
         {
+            if (Duration <= 0)
+                return;
+
             _currentTime += TicksPerSecond * deltaTime;
             _currentTime %= Duration;
 
@@ -73,7 +76,8 @@ namespace Phoenix.Framework.Rendering.Geometry.Model.Animations
             var lerpFactor = 0.0f;
             var midWayLength = time - current.TimeStamp;
             var framesDiff = next.TimeStamp - current.TimeStamp;
-            lerpFactor = midWayLength / framesDiff;
+            if (framesDiff > 0)
+                lerpFactor = Math.Clamp(midWayLength / framesDiff, 0f, 1f);
 
             return current.Interpolate(next, lerpFactor);
         }

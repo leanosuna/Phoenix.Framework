@@ -23,7 +23,7 @@ namespace Phoenix.Framework.Rendering
             UPS = dt;
             Time += dt;
             _timerSamplerUPS += dt;
-            if(_timerSamplerUPS >= UPS_SAMPLE_RATE)
+            if (_timerSamplerUPS >= UPS_SAMPLE_RATE && dt > 0)
             {
                 UPS_SAMPLE = (int)(1.0 / UPS);
                 _timerSamplerUPS = 0;
@@ -33,18 +33,19 @@ namespace Phoenix.Framework.Rendering
         {
             FrameTime = dt;
 
-            FPS = 1.0 / dt;
+            if (dt > 0)
+                FPS = 1.0 / dt;
             _timerSamplerFPS += dt;
             _timerSamplerFT += dt;
 
-            if (_timerSamplerFPS >= FPS_SAMPLE_RATE)
+            if (_timerSamplerFPS >= FPS_SAMPLE_RATE && dt > 0)
             {
                 FPS_SAMPLE = (int)FPS;
                 _timerSamplerFPS = 0;
             }
-            if (_timerSamplerFT >= FT_SAMPLE_RATE)
+            if (_timerSamplerFT >= FT_SAMPLE_RATE && dt > 0)
             {
-                FT_SAMPLE = (int)FrameTime;
+                FT_SAMPLE = (int)(FrameTime * 1000.0);
                 _timerSamplerFT = 0;
             }
         }

@@ -11,7 +11,6 @@ namespace Phoenix.Framework.Rendering.RT
             get;
             internal set;
         } = uint.MaxValue;
-        internal bool IsBound => FrameBuffer != uint.MaxValue;
         public RenderTexture[] RenderTextures { get; internal set; } = default!;
         public int TexturesCount => RenderTextures.Length;
 

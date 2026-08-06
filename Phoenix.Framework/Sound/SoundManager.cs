@@ -25,6 +25,9 @@ namespace Phoenix.Framework.Sound
             
             if (_device == null)
             {
+                _al.Dispose();
+                _al = null;
+                _alc = null;
                 ErrorListWindow.Add("Failed to open OpenAL device.");
                 return;
             }
@@ -32,6 +35,11 @@ namespace Phoenix.Framework.Sound
             _context = _alc.CreateContext(_device, null);
             if (_context == null)
             {
+                _alc.CloseDevice(_device);
+                _al.Dispose();
+                _al = null;
+                _alc = null;
+                _device = null;
                 ErrorListWindow.Add("Failed to create OpenAL context.");
                 return;
             }
@@ -81,7 +89,8 @@ namespace Phoenix.Framework.Sound
 
         public static SoundClip LoadSound(string path)
         {
-            EnsureInitialized();
+            if (!EnsureInitialized())
+                throw new InvalidOperationException("SoundManager.Initialize() must be called first.");
 
             var decoder = _decoders.FirstOrDefault(d => d.CanDecode(path))
                 ?? throw new NotSupportedException($"No decoder available for file: {path}");
@@ -123,19 +132,19 @@ namespace Phoenix.Framework.Sound
 
         public static void SetListenerPosition(Vector3 position)
         {
-            EnsureInitialized();
+            if (!EnsureInitialized()) return;
             _al!.SetListenerProperty(ListenerVector3.Position, position.X, position.Y, position.Z);
         }
 
         public static void SetListenerVelocity(Vector3 velocity)
         {
-            EnsureInitialized();
+            if (!EnsureInitialized()) return;
             _al!.SetListenerProperty(ListenerVector3.Velocity, velocity.X, velocity.Y, velocity.Z);
         }
 
         public static void SetListenerOrientation(Vector3 forward, Vector3 up)
         {
-            EnsureInitialized();
+            if (!EnsureInitialized()) return;
 
             float[] ori =
             {
@@ -154,7 +163,8 @@ namespace Phoenix.Framework.Sound
 
         public static void Update()
         {
-            EnsureInitialized();
+            if (!EnsureInitialized())
+                return;
 
             for (int i = _activeInstances.Count - 1; i >= 0; i--)
             {
@@ -168,7 +178,8 @@ namespace Phoenix.Framework.Sound
 
         private static SoundInstance CreateInstance(SoundClip clip, float volume, float pitch, bool loop, bool is3D)
         {
-            EnsureInitialized();
+            if (!EnsureInitialized())
+                throw new InvalidOperationException("SoundManager.Initialize() must be called first.");
 
             uint source = _al!.GenSource();
 
@@ -198,13 +209,13 @@ namespace Phoenix.Framework.Sound
             return instance;
         }
 
-        private static void EnsureInitialized()
+        private static bool EnsureInitialized()
         {
             if (_al == null || _alc == null)
             {
-                ErrorListWindow.Add("SoundManager.Initialize() must be called first.");
-                return;
+                return false;
             }
+            return true;
         }
     }
 }

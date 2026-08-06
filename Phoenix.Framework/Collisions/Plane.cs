@@ -191,6 +191,9 @@ namespace Phoenix.Framework.Collisions
         public void Normalize()
         {
             float length = Normal.Length();
+            if (length < 1e-12f)
+                return;
+
             float factor = 1f / length;
             Normal = Vector3.Multiply(Normal, factor);
             D = D * factor;
