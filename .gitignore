@@ -3,9 +3,9 @@
 ##
 ## Get latest from `dotnet new gitignore`
 
-SKILLS.md
-AGENTS.md
 .vscode/
+
+# skills/ and .agents/ are intentional and versioned — do not add ignore rules for them
 
 # dotenv files
 .env
