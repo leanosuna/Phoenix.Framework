@@ -1,4 +1,4 @@
-﻿using Phoenix.Framework.Rendering.GUI;
+using Phoenix;
 using Phoenix.Framework.Sound.Decoders;
 using Silk.NET.OpenAL;
 using System.Numerics;
@@ -28,7 +28,7 @@ namespace Phoenix.Framework.Sound
                 _al.Dispose();
                 _al = null;
                 _alc = null;
-                ErrorListWindow.Add("Failed to open OpenAL device.");
+                Log.Error("Failed to open OpenAL device.");
                 return;
             }
 
@@ -40,7 +40,7 @@ namespace Phoenix.Framework.Sound
                 _al = null;
                 _alc = null;
                 _device = null;
-                ErrorListWindow.Add("Failed to create OpenAL context.");
+                Log.Error("Failed to create OpenAL context.");
                 return;
             }
 

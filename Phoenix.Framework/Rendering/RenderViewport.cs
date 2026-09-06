@@ -1,5 +1,4 @@
-﻿using Phoenix.Framework.Rendering.RT;
-using Silk.NET.OpenGL;
+using Silk.NET.Vulkan;
 using System.Numerics;
 
 namespace Phoenix.Framework.Rendering
@@ -35,11 +34,10 @@ namespace Phoenix.Framework.Rendering
                     return;
 
                 field = value;
-                _game.RTManager.HandleWindowResize();
             }
         } = Vector2.One;
 
-        public BlitFramebufferFilter Filter { get; set; } = BlitFramebufferFilter.Linear;
+        public Filter Filter { get; set; } = Filter.Linear;
         private PhoenixGame _game;
         
         internal RenderViewport(PhoenixGame game)

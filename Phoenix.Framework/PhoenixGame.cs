@@ -1,361 +1,286 @@
-﻿using Phoenix.Framework.AssetImport;
+using Phoenix;
 using Phoenix.Framework.Cameras;
 using Phoenix.Framework.Inputs;
 using Phoenix.Framework.Maths;
-using Phoenix.Framework.Network;
 using Phoenix.Framework.Rendering;
-using Phoenix.Framework.Rendering.Gizmos;
-using Phoenix.Framework.Rendering.Primitives;
-using Phoenix.Framework.Rendering.GUI;
-using Phoenix.Framework.Rendering.RT;
-using Phoenix.Framework.Rendering.Shaders;
+using Phoenix.Framework.Rendering.Vulkan;
 using Phoenix.Framework.Sound;
 using Silk.NET.Core;
 using Silk.NET.Maths;
-using Silk.NET.OpenGL;
 using Silk.NET.Windowing;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using System.Numerics;
 
-namespace Phoenix.Framework
+namespace Phoenix.Framework;
+
+public abstract class PhoenixGame : IDisposable
 {
-    public abstract class PhoenixGame
+    public IWindow Window { get; private set; }
+    public Vector2 WindowSize { get; private set; }
+    public Vector2 FramebufferSize { get; private set; }
+    public int WindowWidth => (int)WindowSize.X;
+    public int WindowHeight => (int)WindowSize.Y;
+    public int FramebufferWidth => (int)FramebufferSize.X;
+    public int FramebufferHeight => (int)FramebufferSize.Y;
+
+    public Input Input { get; private set; } = default!;
+    public Camera Camera { get; set; } = default!;
+    public Metrics Metrics { get; } = new Metrics();
+    public RenderViewport RenderViewport { get; private set; } = default!;
+
+    public Silk.NET.Input.Key RenderHaltKey { get; set; } = Silk.NET.Input.Key.F11;
+    public Vector4 ClearColor { get; set; } = new(0.1f, 0.12f, 0.16f, 1.0f);
+
+    internal VulkanContext VulkanContext { get; private set; } = default!;
+    internal VulkanSwapchain VulkanSwapchain { get; private set; } = default!;
+
+    private bool _renderingHalt;
+
+    /// <summary>
+    /// Creates a PhoenixGame instance with default 1600x900 window options.
+    /// </summary>
+    public PhoenixGame()
     {
-        public GL GL { get; private set; } = default!;
-        public IWindow Window { get; private set; }
-        public Vector2 WindowSize { get; private set; }
-        public Vector2 FramebufferSize { get; private set; }
-        public int WindowWidth => (int)WindowSize.X;
-        public int WindowHeight => (int)WindowSize.Y;
-        public int FramebufferWidth => (int)FramebufferSize.X;
-        public int FramebufferHeight => (int)FramebufferSize.Y;
-        public Input Input { get; private set; } = default!;
-        public FullScreenQuad FullScreenQuad { get; private set; } = default!;
-        public Gizmos Gizmos { get; private set; } = default!;
-        public UI UI { get; private set; } = default!;
-        public NetworkManager NetworkManager { get; private set; } = default!;
-        public Camera Camera { get; set; } = default!;
-        public Graphics Graphics { get; set; } = default!;
-        
-        public uint CommonUboHandle { get; private set; } = 0;
+        var options = WindowOptions.Default;
+        options.Size = new Vector2D<int>(1600, 900);
+        options.Title = "Phoenix Game (Vulkan)";
+        options.VSync = true;
+        options.API = GraphicsAPI.None;
 
-        internal RTManager RTManager = default!;
+        Window = Silk.NET.Windowing.Window.Create(options);
+        WindowSize = Window.Size.ToNum();
+        FramebufferSize = WindowSize;
 
-        private CommonUBO _commonUboData;
-        private bool _delayedLoadDone = false;
-        private bool _renderingHalt = false;
-        private bool _firstFrame = true;
+        Window.Load += InternalLoad;
+        Window.Update += InternalUpdate;
+        Window.Render += InternalRender;
+        Window.FramebufferResize += InternalFramebufferResize;
+        Window.Closing += InternalOnClose;
+    }
 
-        internal RenderTarget _sceneRT = null!;
-        public PhoenixGame()
+    /// <summary>
+    /// Creates a PhoenixGame instance with custom window configuration options.
+    /// </summary>
+    public PhoenixGame(WindowOptions options)
+    {
+        options.API = GraphicsAPI.None;
+        Window = Silk.NET.Windowing.Window.Create(options);
+
+        WindowSize = Window.Size.ToNum();
+        FramebufferSize = WindowSize;
+
+        Window.Load += InternalLoad;
+        Window.Update += InternalUpdate;
+        Window.Render += InternalRender;
+        Window.FramebufferResize += InternalFramebufferResize;
+        Window.Closing += InternalOnClose;
+    }
+
+    /// <summary>
+    /// Starts the main game loop and runs the window.
+    /// </summary>
+    public void Run()
+    {
+        try
         {
-            var options = WindowOptions.Default;
-            options.Size = new Vector2D<int>(1600, 900);
-            options.Title = "Phoenix Game";
-            options.VSync = true;
-
-            var glApi = new APIVersion(4, 1);
-            options.API = new GraphicsAPI(ContextAPI.OpenGL, ContextProfile.Core, ContextFlags.Default, glApi);
-
-            Window = Silk.NET.Windowing.Window.Create(options);
-            WindowSize = Window.Size.ToNum();
-            FramebufferSize = WindowSize;
-
-            Window.Load += InternalLoad;
-            Window.Update += InternalUpdate;
-            Window.Render += InternalRender;
-            Window.FramebufferResize += InternalFramebufferResize;
-            Window.Closing += InternalOnClose;
-             
-
+            Window.Run();
         }
-        public PhoenixGame(WindowOptions options)
+        catch (Exception ex)
         {
-            Window = Silk.NET.Windowing.Window.Create(options);
-
-            WindowSize = Window.Size.ToNum();
-            FramebufferSize = WindowSize;
-
-            Window.Load += InternalLoad;
-            Window.Update += InternalUpdate;
-            Window.Render += InternalRender;
-            Window.FramebufferResize += InternalFramebufferResize;
-            Window.Closing += InternalOnClose;
-
-        }
-        /// <summary>
-        /// Run the game (thread gets locked until game window is closed)
-        /// </summary>
-        public void Run()
-        {
-            try
-            {
-                Window.Run();
-            }
-            catch (Exception ex)
-            {
-
-                Log.Enabled = true;
-                Log.Verbose = true;
-                Log.Date = true;
-                Log.Time = true;
-                var strException = ex.Message;
-                if (ex.StackTrace != null)
-                    strException += $"\n{ex.StackTrace}";
-                Log.Exception(strException);
-
-                throw;
-            }
-            //thread blocked here until the window is closed.
-            Window.Dispose();
-        }
-        /// <summary>
-        /// Stop the game window
-        /// </summary>
-        public void Stop()
-        {
-            Window.Close();
-        }
-        /// <summary>
-        /// This method gets called after GL Window and internal initialization
-        /// </summary>
-        protected abstract void Initialize();
-        /// <summary>
-        /// This method gets called every frame. Game logic should go here.
-        /// </summary>
-        /// <param name="deltaTime">Time in seconds since the last Update() call</param>
-        protected abstract void Update(double deltaTime);
-        /// <summary>
-        /// This method gets called every frame. Game rendering should go here.
-        /// </summary>
-        /// <param name="deltaTime">Time in seconds since the last Render() call</param>
-        protected abstract void Render(double deltaTime);
-
-        /// <summary>
-        /// This optional method gets called every frame. UI rendering should go here.
-        /// </summary>
-        /// <param name="deltaTime">Time in seconds since the last Render() call</param>
-
-        protected virtual void RenderUI()
-        {
-
+            Log.Enabled = true;
+            Log.Verbose = true;
+            Log.Date = true;
+            Log.Time = true;
+            var strException = ex.Message;
+            if (!string.IsNullOrEmpty(ex.StackTrace))
+                strException += $"\n{ex.StackTrace}";
+            Log.Exception(strException);
+            throw;
         }
 
-        /// <summary>
-        /// This optional method gets called every time the window gets resized.
-        /// </summary>
-        /// <param name="size">The new window size</param>
-        protected virtual void OnWindowResize(Vector2 size)
-        {
+        Window.Dispose();
+    }
 
+    /// <summary>
+    /// Closes and stops the game window.
+    /// </summary>
+    public void Stop()
+    {
+        Window.Close();
+    }
+
+    /// <summary>
+    /// Disposes window and framework resources.
+    /// </summary>
+    public void Dispose()
+    {
+        Window?.Dispose();
+    }
+
+    /// <summary>
+    /// Invoked once after graphics and subsystems have loaded.
+    /// </summary>
+    protected abstract void Initialize();
+
+    /// <summary>
+    /// Invoked every frame to update game state.
+    /// </summary>
+    protected abstract void Update(double deltaTime);
+
+    /// <summary>
+    /// Invoked every frame to record rendering commands.
+    /// </summary>
+    protected abstract void Render(double deltaTime);
+
+    /// <summary>
+    /// Invoked after scene rendering to draw user interface overlays.
+    /// </summary>
+    protected virtual void RenderUI()
+    {
+    }
+
+    /// <summary>
+    /// Invoked when the window or framebuffer size changes.
+    /// </summary>
+    protected virtual void OnWindowResize(Vector2 size)
+    {
+    }
+
+    /// <summary>
+    /// Invoked before the game shuts down.
+    /// </summary>
+    protected virtual void OnClose()
+    {
+    }
+
+    /// <summary>
+    /// Initializes window state, Vulkan backend, input, and viewport settings.
+    /// </summary>
+    private void InternalLoad()
+    {
+        Log.Enabled = true;
+        Log.ConsoleWrite = true;
+        Log.Info("Game starting (Vulkan 1.3 pipeline)");
+        Window.Center();
+        SetDefaultIcon();
+
+        FramebufferSize = Window.FramebufferSize.ToNum();
+        WindowSize = Window.Size.ToNum();
+
+        VulkanContext = new VulkanContext(Window, Window.Title);
+        VulkanSwapchain = new VulkanSwapchain(VulkanContext, Window);
+
+        Input = new Input(this);
+        RenderViewport = new RenderViewport(this);
+
+        InternalFramebufferResize(Window.FramebufferSize);
+
+        SoundManager.Initialize();
+        Initialize();
+    }
+
+    /// <summary>
+    /// Coordinates internal update routines including input polling and metrics processing.
+    /// </summary>
+    private void InternalUpdate(double deltaTime)
+    {
+        Metrics.ProcessUpdate(deltaTime);
+        Input.Update();
+
+        if (Input.KeyDownOnce(RenderHaltKey))
+        {
+            if (!_renderingHalt)
+                Input.SetTemporaryMouseMode(Silk.NET.Input.CursorMode.Normal);
+            else
+                Input.RestoreMouseMode();
+
+            _renderingHalt = !_renderingHalt;
         }
 
-        /// <summary>
-        /// This optional method gets called when the game window is closed
-        /// </summary>
-        protected virtual void OnClose()
-        {
+        if (!_renderingHalt)
+            Update(deltaTime);
+    }
 
-        }
+    /// <summary>
+    /// Coordinates frame rendering, dynamic rendering pass execution, and swapchain presentation.
+    /// </summary>
+    private void InternalRender(double deltaTime)
+    {
+        Metrics.ProcessRender(deltaTime);
 
-        private void InternalLoad()
-        {
-            Log.Info("Game starting");
-            Window.Center();
-            GL = GL.GetApi(Window);
-            SetDefaultIcon();
+        if (!VulkanSwapchain.AcquireNextImage(out uint imageIndex))
+            return;
 
-            FramebufferSize = Window.FramebufferSize.ToNum();
-            WindowSize = Window.Size.ToNum();
+        var cmd = VulkanSwapchain.BeginCommandBuffer();
 
-            Input = new Input(this);
-            UI = new UI(this);
-            RTManager = new RTManager(this);
-            _sceneRT = RTManager.BuildRT()
-                .SetName("internal-scene")
-                .AddTexture(RTManager.BuildRTT().Build())
-                .SetDepthBuffer(new DepthBuffer())
-                .Build();
+        VulkanSwapchain.RecordClearPass(cmd, imageIndex, ClearColor);
 
+        if (!_renderingHalt)
+            Render(deltaTime);
 
-            Graphics = new Graphics(this);
+        RenderUI();
 
-            GenCommonUBO();
+        VulkanSwapchain.SubmitAndPresent(cmd, imageIndex);
+    }
 
-            InternalFramebufferResize(Window.FramebufferSize);
-        }
-        private unsafe void GenCommonUBO()
-        {
-            CommonUboHandle = GL.GenBuffer();
-            GL.BindBuffer(BufferTargetARB.UniformBuffer, CommonUboHandle);
-            GL.BufferData(BufferTargetARB.UniformBuffer, (nuint)(sizeof(CommonUBO)), null, BufferUsageARB.DynamicDraw);
-            GL.BindBufferBase(BufferTargetARB.UniformBuffer, 0, CommonUboHandle);
-        }
+    /// <summary>
+    /// Updates window dimension tracking and triggers swapchain recreation upon resize.
+    /// </summary>
+    private void InternalFramebufferResize(Vector2D<int> size)
+    {
+        FramebufferSize = new Vector2(size.X, size.Y);
+        WindowSize = Window.Size.ToNum();
 
-        private void DelayedLoad()
-        {
-            FullScreenQuad = new FullScreenQuad(this);
-            Primitive.SetGL(GL);
-            Gizmos = new Gizmos(this);
-            SoundManager.Initialize();
-            //NetworkManager = new NetworkManager(this);
-            AssetLoader.Init(this);
+        VulkanSwapchain?.Recreate(size);
+        OnWindowResize(WindowSize);
+    }
 
-            // User defined Initialize
-            Initialize();
-            _delayedLoadDone = true;
-        }
-        
-        private void InternalUpdate(double deltaTime)
-        {
-            if (!_delayedLoadDone)
-            {
-                if (!_firstFrame)
-                {
-                    DelayedLoad();
-                }
-                _firstFrame = false;
-                return;
-            }
-            Graphics.Metrics.ProcessUpdate(deltaTime);
+    /// <summary>
+    /// Releases audio, Vulkan, and window resources on application close.
+    /// </summary>
+    private void InternalOnClose()
+    {
+        SoundManager.Shutdown();
+        OnClose();
 
-            Input.Update();
-            if(Input.KeyDownOnce(Graphics.RenderHaltKey))
-            {
-                if(!_renderingHalt)
-                {
-                    Input.SetTemporaryMouseMode(Silk.NET.Input.CursorMode.Normal);
-                }
-                else
-                {
-                    Input.RestoreMouseMode();
-                }
-                _renderingHalt = !_renderingHalt;
+        VulkanSwapchain?.Dispose();
+        VulkanContext?.Dispose();
+    }
 
-            }
+    /// <summary>
+    /// Extracts and assigns the default framework window icon.
+    /// </summary>
+    public void SetDefaultIcon()
+    {
+        SetIcon(EmbeddedHelper.ExtractPath("phnx.png", "Files.Icons"));
+    }
 
-            //NetworkManager.Update();
-            // User defined Update
+    /// <summary>
+    /// Assigns a custom window icon from a file path.
+    /// </summary>
+    public void SetCustomWindowIcon(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return;
 
-            if(!_renderingHalt)
-            {
-                if (Gizmos.Enabled)
-                    Gizmos.Update();
+        SetIcon(path);
+    }
 
-                Update(deltaTime);
-                UpdateCommonUBO(deltaTime);
-            }
-            
-        }
+    /// <summary>
+    /// Loads an image from disk and passes the raw pixel buffer to the window icon API.
+    /// </summary>
+    private void SetIcon(string path)
+    {
+        using Image<Rgba32> image = Image.Load<Rgba32>(path);
 
-        private unsafe void UpdateCommonUBO(double dt)
-        {
-            if (Camera is null)
-                return;
-            _commonUboData = new CommonUBO(Camera.View, Camera.Projection, (float)Graphics.Metrics.Time, (float)dt);
-            GL.BindBuffer(GLEnum.UniformBuffer, CommonUboHandle);
-            fixed (void* d = & _commonUboData)
-            {
-                GL.BufferSubData(GLEnum.UniformBuffer, 0, (nuint)sizeof(CommonUBO), d);
-            }
-        }
+        int w = image.Width;
+        int h = image.Height;
 
-        /// <summary>
-        /// This allows you to show a first frame with a message, progress bar 
-        /// or whatever you want while the Initialize() function runs
-        /// </summary>
-        protected virtual void InitialLoadScreen()
-        {
-            var str = "Loading game assets...";
+        byte[] d = new byte[w * h * 4];
+        image.CopyPixelDataTo(d);
+        var img = new RawImage(w, h, (Memory<byte>)d);
 
-            UI.DrawCenteredText(str,new Vector2(WindowSize.X / 2, WindowSize.Y / 2), Vector4.One, 30);
-        }
-        
-
-        private void InternalRender(double deltaTime)
-        {
-            Graphics.Metrics.ProcessRender(deltaTime);
-            
-            if (!_delayedLoadDone)
-            {
-                InitialLoadScreen();
-                UI.Render();
-                return;
-            }
-            UI.Update(deltaTime);
-
-            
-            if(!_renderingHalt)
-            {
-                Graphics.SetRenderToTarget(_sceneRT);
-
-                Render(deltaTime);
-                if (Gizmos.Enabled)
-                    Gizmos.Render(); 
-            }
-            RTManager.TrueRenderToScreen();
-            Graphics.ClearRenderTarget();
-
-            var rv = Graphics.RenderViewport;
-            Graphics.TrueCopyToScreen(_sceneRT, 0,
-                new Vector4(0,0,rv.Width,rv.Height),
-                new Vector4(0,0,FramebufferWidth, FramebufferHeight), rv.Filter);
-
-            RenderUI();
-
-            UI.Render();
-        }
-                
-        private void InternalFramebufferResize(Vector2D<int> size)
-        {
-            FramebufferSize = new Vector2(size.X, size.Y);
-            WindowSize = Window.Size.ToNum();
-
-            GL.Viewport(size);
-            RTManager.HandleWindowResize();
-            OnWindowResize(WindowSize);
-        }
-        private void InternalOnClose()
-        {
-            SoundManager.Shutdown();
-            OnClose();
-        }
-
-        public void SetDefaultIcon()
-        {
-            SetIcon(EmbeddedHelper.ExtractPath("phnx.png", "Files.Icons"));
-        }
-        public void SetCustomWindowIcon(string path)
-        {
-            if (string.IsNullOrWhiteSpace(path))
-                return;
-
-            SetIcon(path);
-        }
-        private void SetIcon(string path)
-        {
-            using Image<Rgba32> image = Image.Load<Rgba32>(path);
-
-            int w = image.Width;
-            int h = image.Height;
-
-            (Vector2 s, byte[] d) = (new Vector2(w, h), new byte[w * h * 4]);
-            image.CopyPixelDataTo(d);
-            var img = new RawImage(w, h, (Memory<byte>)d);
-
-            Window.SetWindowIcon(ref img);
-        }
-
-        
-
-        //public static void CheckGLError(string label)
-        //{
-        //    var err = GL.GetError();
-        //    if (err != GLEnum.NoError)
-        //        Log.Error($"[GL ERROR] {label}: {err}");
-        //    //throw new Exception();
-        //}
-
+        Window.SetWindowIcon(ref img);
     }
 }

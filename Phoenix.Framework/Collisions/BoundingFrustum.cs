@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 
 namespace Phoenix.Framework.Collisions
 {
@@ -151,31 +151,6 @@ namespace Phoenix.Framework.Collisions
         #region Contains
 
         /// <summary>
-        /// Containment test between this <see cref="BoundingFrustum"/> and specified <see cref="AxisAlignedBoundingBox"/>.
-        /// </summary>
-        /// <param name="box">A <see cref="AxisAlignedBoundingBox"/> for testing.</param>
-        /// <returns>Result of testing for containment between this <see cref="BoundingFrustum"/> and specified <see cref="AxisAlignedBoundingBox"/>.</returns>
-        public ContainmentType Contains(AxisAlignedBoundingBox box)
-        {
-            var intersects = false;
-            for (var i = 0; i < PlaneCount; ++i)
-            {
-                var planeIntersectionType = box.Intersects(_planes[i]);
-
-                switch (planeIntersectionType)
-                {
-                    case PlaneIntersectionType.Front:
-                        return ContainmentType.Disjoint;
-
-                    case PlaneIntersectionType.Intersecting:
-                        intersects = true;
-                        break;
-                }
-            }
-            return intersects ? ContainmentType.Intersects : ContainmentType.Contains;
-        }
-
-        /// <summary>
         /// Containment test between this <see cref="BoundingFrustum"/> and specified <see cref="BoundingFrustum"/>.
         /// </summary>
         /// <param name="frustum">A <see cref="BoundingFrustum"/> for testing.</param>
@@ -201,30 +176,6 @@ namespace Phoenix.Framework.Collisions
             return intersects ? ContainmentType.Intersects : ContainmentType.Contains;
         }
 
-        /// <summary>
-        /// Containment test between this <see cref="BoundingFrustum"/> and specified <see cref="BoundingSphere"/>.
-        /// </summary>
-        /// <param name="sphere">A <see cref="BoundingSphere"/> for testing.</param>
-        /// <returns>Result of testing for containment between this <see cref="BoundingFrustum"/> and specified <see cref="BoundingSphere"/>.</returns>
-        public ContainmentType Contains(BoundingSphere sphere)
-        {
-            var intersects = false;
-            for (var i = 0; i < PlaneCount; ++i)
-            {
-                var planeIntersectionType = sphere.Intersects(_planes[i]);
-                switch (planeIntersectionType)
-                {
-                    case PlaneIntersectionType.Front:
-                        return ContainmentType.Disjoint;
-
-                    case PlaneIntersectionType.Intersecting:
-                        intersects = true;
-                        break;
-                }
-            }
-            return intersects ? ContainmentType.Intersects : ContainmentType.Contains;
-        }
-
 
         /// <summary>
         /// Containment test between this <see cref="BoundingFrustum"/> and specified <see cref="Vector3"/>.
@@ -235,7 +186,7 @@ namespace Phoenix.Framework.Collisions
         {
             for (var i = 0; i < PlaneCount; ++i)
             {
-                if (PlaneHelper.ClassifyPoint(_planes[i], point) > 0)
+                if (_planes[i].DotCoordinate(point) > 0)
                 {
                     return ContainmentType.Disjoint;
                 }
@@ -296,16 +247,6 @@ namespace Phoenix.Framework.Collisions
         }
 
         /// <summary>
-        /// Gets whether or not a specified <see cref="AxisAlignedBoundingBox"/> intersects with this <see cref="BoundingFrustum"/>.
-        /// </summary>
-        /// <param name="box">A <see cref="AxisAlignedBoundingBox"/> for intersection test.</param>
-        /// <returns><c>true</c> if specified <see cref="AxisAlignedBoundingBox"/> intersects with this <see cref="BoundingFrustum"/>; <c>false</c> otherwise.</returns>
-        public bool Intersects(AxisAlignedBoundingBox box)
-        {
-            return Contains(box) != ContainmentType.Disjoint;
-        }
-
-        /// <summary>
         /// Gets whether or not a specified <see cref="BoundingFrustum"/> intersects with this <see cref="BoundingFrustum"/>.
         /// </summary>
         /// <param name="frustum">An other <see cref="BoundingFrustum"/> for intersection test.</param>
@@ -313,29 +254,6 @@ namespace Phoenix.Framework.Collisions
         public bool Intersects(BoundingFrustum frustum)
         {
             return Contains(frustum) != ContainmentType.Disjoint;
-        }
-
-        /// <summary>
-        /// Gets whether or not a specified <see cref="BoundingSphere"/> intersects with this <see cref="BoundingFrustum"/>.
-        /// </summary>
-        /// <param name="sphere">A <see cref="BoundingSphere"/> for intersection test.</param>
-        /// <returns><c>true</c> if specified <see cref="BoundingSphere"/> intersects with this <see cref="BoundingFrustum"/>; <c>false</c> otherwise.</returns>
-        public bool Intersects(BoundingSphere sphere)
-        {
-            var result = default(bool);
-            this.Intersects(ref sphere, out result);
-            return result;
-        }
-
-        /// <summary>
-        /// Gets whether or not a specified <see cref="BoundingSphere"/> intersects with this <see cref="BoundingFrustum"/>.
-        /// </summary>
-        /// <param name="sphere">A <see cref="BoundingSphere"/> for intersection test.</param>
-        /// <param name="result"><c>true</c> if specified <see cref="BoundingSphere"/> intersects with this <see cref="BoundingFrustum"/>; <c>false</c> otherwise as an output parameter.</param>
-        public void Intersects(ref BoundingSphere sphere, out bool result)
-        {
-            var containment = Contains(sphere);
-            result = containment != ContainmentType.Disjoint;
         }
 
         /// <summary>
@@ -351,54 +269,6 @@ namespace Phoenix.Framework.Collisions
                     result = PlaneIntersectionType.Intersecting;
 
             return result;
-        }
-
-        /// <summary>
-        /// Gets the distance of intersection of <see cref="Ray"/> and this <see cref="BoundingFrustum"/> or null if no intersection happens.
-        /// </summary>
-        /// <param name="ray">A <see cref="Ray"/> for intersection test.</param>
-        /// <returns>Distance at which ray intersects with this <see cref="BoundingFrustum"/> or null if no intersection happens.</returns>
-        public float? Intersects(Ray ray)
-        {
-            // Clip the ray against all 6 frustum planes (normals point inward)
-            float tmin = 0f;
-            float tmax = float.MaxValue;
-
-            for (var i = 0; i < PlaneCount; ++i)
-            {
-                var plane = _planes[i];
-                var dotNormal = Vector3.Dot(plane.Normal, ray.Direction);
-                var distance = Vector3.Dot(plane.Normal, ray.Position) + plane.D;
-
-                if (MathF.Abs(dotNormal) < 1e-6f)
-                {
-                    // Ray parallel to the plane: must not be outside it
-                    if (distance > 0f)
-                        return null;
-                    continue;
-                }
-
-                var t = -distance / dotNormal;
-
-                if (dotNormal > 0f)
-                {
-                    // Moving toward the inside: the plane caps the exit distance
-                    tmax = MathF.Min(tmax, t);
-                }
-                else
-                {
-                    // Moving away from the plane: it sets the entry distance
-                    tmin = MathF.Max(tmin, t);
-                }
-
-                if (tmin > tmax)
-                    return null;
-            }
-
-            if (tmax < 0f)
-                return null;
-
-            return tmin;
         }
 
         /// <summary>

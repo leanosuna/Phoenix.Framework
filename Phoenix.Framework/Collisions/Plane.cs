@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using System.Runtime.Serialization;
 
 namespace Phoenix.Framework.Collisions
@@ -257,19 +257,6 @@ namespace Phoenix.Framework.Collisions
         }
 
         /// <summary>
-        /// Check if this <see cref="Plane"/> intersects a <see cref="AxisAlignedBoundingBox"/>.
-        /// </summary>
-        /// <param name="box">The <see cref="AxisAlignedBoundingBox"/> to test for intersection.</param>
-        /// <returns>
-        /// The type of intersection of this <see cref="Plane"/> with the specified <see cref="AxisAlignedBoundingBox"/>.
-        /// </returns>
-        public PlaneIntersectionType Intersects(AxisAlignedBoundingBox box)
-        {
-            return box.Intersects(this);
-        }
-
-
-        /// <summary>
         /// Check if this <see cref="Plane"/> intersects a <see cref="BoundingFrustum"/>.
         /// </summary>
         /// <param name="frustum">The <see cref="BoundingFrustum"/> to test for intersection.</param>
@@ -279,18 +266,6 @@ namespace Phoenix.Framework.Collisions
         public PlaneIntersectionType Intersects(BoundingFrustum frustum)
         {
             return frustum.Intersects(this);
-        }
-
-        /// <summary>
-        /// Check if this <see cref="Plane"/> intersects a <see cref="BoundingSphere"/>.
-        /// </summary>
-        /// <param name="sphere">The <see cref="BoundingSphere"/> to test for intersection.</param>
-        /// <returns>
-        /// The type of intersection of this <see cref="Plane"/> with the specified <see cref="BoundingSphere"/>.
-        /// </returns>
-        public PlaneIntersectionType Intersects(BoundingSphere sphere)
-        {
-            return sphere.Intersects(this);
         }
 
         internal PlaneIntersectionType Intersects(ref Vector3 point)
