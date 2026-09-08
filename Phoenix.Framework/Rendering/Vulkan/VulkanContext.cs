@@ -10,8 +10,9 @@ using System.Runtime.InteropServices;
 
 namespace Phoenix.Framework.Rendering.Vulkan;
 
-internal sealed unsafe class VulkanContext : IDisposable
+public sealed unsafe class VulkanContext : IDisposable
 {
+
     private readonly Vk _vk;
     private readonly Instance _instance;
     private readonly KhrSurface _khrSurface;
@@ -493,6 +494,40 @@ internal sealed unsafe class VulkanContext : IDisposable
             }
         }
         return names;
+    }
+
+    /// <summary>
+    /// Searches for a memory type index supported by the physical device that matches required property flags.
+    /// </summary>
+    public uint FindMemoryType(uint typeFilter, MemoryPropertyFlags properties)
+    {
+        _vk.GetPhysicalDeviceMemoryProperties(_physicalDevice, out var memProperties);
+        for (int i = 0; i < memProperties.MemoryTypeCount; i++)
+        {
+            if ((typeFilter & (1u << i)) != 0 && (memProperties.MemoryTypes[i].PropertyFlags & properties) == properties)
+                return (uint)i;
+        }
+
+        throw new NotSupportedException("Failed to find suitable GPU memory type.");
+    }
+
+    /// <summary>
+    /// Evaluates candidate image formats and returns the first format supported by the physical device with the requested features.
+    /// </summary>
+    public Format FindSupportedFormat(IEnumerable<Format> candidates, ImageTiling tiling, FormatFeatureFlags features)
+    {
+        foreach (var format in candidates)
+        {
+            _vk.GetPhysicalDeviceFormatProperties(_physicalDevice, format, out var props);
+
+            if (tiling == ImageTiling.Linear && (props.LinearTilingFeatures & features) == features)
+                return format;
+
+            if (tiling == ImageTiling.Optimal && (props.OptimalTilingFeatures & features) == features)
+                return format;
+        }
+
+        throw new NotSupportedException("Failed to find supported format.");
     }
 
     /// <summary>

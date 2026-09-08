@@ -4,6 +4,7 @@ using Phoenix.Framework.Inputs;
 using Phoenix.Framework.Maths;
 using Phoenix.Framework.Rendering;
 using Phoenix.Framework.Rendering.Vulkan;
+using Phoenix.Framework.Rendering.Windowing;
 using Phoenix.Framework.Sound;
 using Silk.NET.Core;
 using Silk.NET.Maths;
@@ -16,6 +17,21 @@ namespace Phoenix.Framework;
 
 public abstract class PhoenixGame : IDisposable
 {
+    /// <summary>
+    /// Gets the currently configured windowing platform backend.
+    /// </summary>
+    public static WindowBackend ConfiguredPlatform => BackendHelper.ConfiguredPlatform;
+
+    /// <summary>
+    /// Explicitly selects the windowing backend before window initialization on Linux.
+    /// </summary>
+    public static void SetPlatform(WindowBackend platform) => BackendHelper.SetPlatform(platform);
+
+    /// <summary>
+    /// Inspects command-line arguments and environment variables to configure the windowing platform.
+    /// </summary>
+    public static void ConfigurePlatform(string[]? args = null) => BackendHelper.ConfigurePlatform(args);
+
     public IWindow Window { get; private set; }
     public Vector2 WindowSize { get; private set; }
     public Vector2 FramebufferSize { get; private set; }
@@ -25,30 +41,44 @@ public abstract class PhoenixGame : IDisposable
     public int FramebufferHeight => (int)FramebufferSize.Y;
 
     public Input Input { get; private set; } = default!;
-    public Camera Camera { get; set; } = default!;
+    public Camera? Camera { get; set; }
     public Metrics Metrics { get; } = new Metrics();
-    public RenderViewport RenderViewport { get; private set; } = default!;
-
-    public Silk.NET.Input.Key RenderHaltKey { get; set; } = Silk.NET.Input.Key.F11;
-    public Vector4 ClearColor { get; set; } = new(0.1f, 0.12f, 0.16f, 1.0f);
-
-    internal VulkanContext VulkanContext { get; private set; } = default!;
-    internal VulkanSwapchain VulkanSwapchain { get; private set; } = default!;
-
-    private bool _renderingHalt;
 
     /// <summary>
-    /// Creates a PhoenixGame instance with default 1600x900 window options.
+    /// Gets the graphics engine managing Vulkan devices, swapchain, uniform buffers, and pipelines.
     /// </summary>
-    public PhoenixGame()
-    {
-        var options = WindowOptions.Default;
-        options.Size = new Vector2D<int>(1600, 900);
-        options.Title = "Phoenix Game (Vulkan)";
-        options.VSync = true;
-        options.API = GraphicsAPI.None;
+    public Graphics Graphics { get; private set; } = default!;
 
-        Window = Silk.NET.Windowing.Window.Create(options);
+    /// <summary>
+    /// Gets the parsed command-line launch arguments.
+    /// </summary>
+    public GameArguments Arguments { get; }
+
+    /// <summary>
+    /// Constructs a PhoenixGame with the provided command-line arguments and default window settings.
+    /// </summary>
+    protected PhoenixGame(string[]? args)
+        : this(args, null)
+    {
+    }
+
+    /// <summary>
+    /// Constructs a PhoenixGame with command-line arguments and custom base window configuration.
+    /// </summary>
+    protected PhoenixGame(string[]? args, WindowOptions? options)
+    {
+        Arguments = GameArguments.Parse(args);
+        BackendHelper.SetPlatform(Arguments.WindowBackend);
+
+        var winOptions = WindowOptions.Default;
+        winOptions.API = GraphicsAPI.None;
+
+        if(options is null)
+            ApplyDefaultWindowSettings(ref winOptions);
+        
+        ConfigureWindow(ref winOptions);
+
+        Window = Silk.NET.Windowing.Window.Create(winOptions);
         WindowSize = Window.Size.ToNum();
         FramebufferSize = WindowSize;
 
@@ -60,21 +90,37 @@ public abstract class PhoenixGame : IDisposable
     }
 
     /// <summary>
-    /// Creates a PhoenixGame instance with custom window configuration options.
+    /// Applies framework command-line arguments to WindowOptions before window creation.
     /// </summary>
-    public PhoenixGame(WindowOptions options)
+    private void ApplyDefaultWindowSettings(ref WindowOptions winOptions)
     {
-        options.API = GraphicsAPI.None;
-        Window = Silk.NET.Windowing.Window.Create(options);
+        if (Arguments is { Width: not null, Height: not null })
+            winOptions.Size = new Vector2D<int>(Arguments.Width.Value, Arguments.Height.Value);
+        else if (winOptions.Size.X <= 0 || winOptions.Size.Y <= 0)
+            winOptions.Size = new Vector2D<int>(1600, 900);
 
-        WindowSize = Window.Size.ToNum();
-        FramebufferSize = WindowSize;
+        if (Arguments.VSync.HasValue)
+            winOptions.VSync = Arguments.VSync.Value;
 
-        Window.Load += InternalLoad;
-        Window.Update += InternalUpdate;
-        Window.Render += InternalRender;
-        Window.FramebufferResize += InternalFramebufferResize;
-        Window.Closing += InternalOnClose;
+        if (Arguments.Fullscreen.HasValue)
+            winOptions.WindowState = Arguments.Fullscreen.Value ? WindowState.Fullscreen : WindowState.Normal;
+
+        if (!string.IsNullOrEmpty(Arguments.Title))
+            winOptions.Title = Arguments.Title;
+
+        if (Arguments.FpsLimit.HasValue)
+        {
+            winOptions.FramesPerSecond = Arguments.FpsLimit.Value;
+            winOptions.UpdatesPerSecond = Arguments.FpsLimit.Value;
+        }
+    }
+
+    /// <summary>
+    /// Invoked before window creation to allow derived games to inspect launch arguments and modify WindowOptions.
+    /// Framework command-line argument defaults have already been applied to winOptions prior to this invocation.
+    /// </summary>
+    protected virtual void ConfigureWindow(ref WindowOptions winOptions)
+    {
     }
 
     /// <summary>
@@ -115,7 +161,7 @@ public abstract class PhoenixGame : IDisposable
     /// </summary>
     public void Dispose()
     {
-        Window?.Dispose();
+        Window.Dispose();
     }
 
     /// <summary>
@@ -129,9 +175,9 @@ public abstract class PhoenixGame : IDisposable
     protected abstract void Update(double deltaTime);
 
     /// <summary>
-    /// Invoked every frame to record rendering commands.
+    /// Invoked every frame to record rendering commands into the provided render context.
     /// </summary>
-    protected abstract void Render(double deltaTime);
+    protected abstract void Render(RenderContext ctx, double deltaTime);
 
     /// <summary>
     /// Invoked after scene rendering to draw user interface overlays.
@@ -168,16 +214,18 @@ public abstract class PhoenixGame : IDisposable
         FramebufferSize = Window.FramebufferSize.ToNum();
         WindowSize = Window.Size.ToNum();
 
-        VulkanContext = new VulkanContext(Window, Window.Title);
-        VulkanSwapchain = new VulkanSwapchain(VulkanContext, Window);
-
+        Graphics = new Graphics(this);
         Input = new Input(this);
-        RenderViewport = new RenderViewport(this);
 
         InternalFramebufferResize(Window.FramebufferSize);
 
         SoundManager.Initialize();
         Initialize();
+
+        if (Graphics.Swapchain.IsVSyncEnabled != Window.VSync)
+        {
+            Graphics.Swapchain.Recreate(Window.FramebufferSize);
+        }
     }
 
     /// <summary>
@@ -188,40 +236,49 @@ public abstract class PhoenixGame : IDisposable
         Metrics.ProcessUpdate(deltaTime);
         Input.Update();
 
-        if (Input.KeyDownOnce(RenderHaltKey))
+        if (Input.KeyDownOnce(Graphics.RenderHaltKey))
         {
-            if (!_renderingHalt)
+            if (!Graphics.RenderHalt)
                 Input.SetTemporaryMouseMode(Silk.NET.Input.CursorMode.Normal);
             else
                 Input.RestoreMouseMode();
 
-            _renderingHalt = !_renderingHalt;
+            Graphics.RenderHalt = !Graphics.RenderHalt;
         }
 
-        if (!_renderingHalt)
+        if (!Graphics.RenderHalt)
             Update(deltaTime);
     }
 
     /// <summary>
-    /// Coordinates frame rendering, dynamic rendering pass execution, and swapchain presentation.
+    /// Coordinates frame rendering, uniform updates, dynamic passes, and swapchain presentation.
     /// </summary>
     private void InternalRender(double deltaTime)
     {
         Metrics.ProcessRender(deltaTime);
 
-        if (!VulkanSwapchain.AcquireNextImage(out uint imageIndex))
+        if (!Graphics.Swapchain.AcquireNextImage(out uint imageIndex))
             return;
 
-        var cmd = VulkanSwapchain.BeginCommandBuffer();
+        Matrix4x4 view = Camera?.View ?? Matrix4x4.CreateLookAt(new Vector3(0, 0, 5), Vector3.Zero, Vector3.UnitY);
+        Matrix4x4 proj = Camera?.Projection ?? Matrix4x4.CreatePerspectiveFieldOfView(MathF.PI / 4f, (float)FramebufferWidth / FramebufferHeight, 0.1f, 1000f);
+        Vector3 camPos = Camera?.Position ?? new Vector3(0, 0, 5);
 
-        VulkanSwapchain.RecordClearPass(cmd, imageIndex, ClearColor);
+        CommonUBOData uboData = new(view, proj, camPos, (float)Metrics.Time, (float)deltaTime);
+        Graphics.CommonUbo.Update(Graphics.Swapchain.CurrentFrame, in uboData);
 
-        if (!_renderingHalt)
-            Render(deltaTime);
+        var cmd = Graphics.Swapchain.BeginCommandBuffer();
+        Graphics.RenderContext.Prepare(cmd, imageIndex, Graphics.Swapchain.CurrentFrame);
+
+        if (!Graphics.RenderHalt)
+            Render(Graphics.RenderContext, deltaTime);
+
+        if (!Graphics.RenderContext.HasRenderedPass)
+            Graphics.RenderContext.FallbackClearPass(Graphics.ClearColor);
 
         RenderUI();
 
-        VulkanSwapchain.SubmitAndPresent(cmd, imageIndex);
+        Graphics.Swapchain.SubmitAndPresent(cmd, imageIndex);
     }
 
     /// <summary>
@@ -232,7 +289,7 @@ public abstract class PhoenixGame : IDisposable
         FramebufferSize = new Vector2(size.X, size.Y);
         WindowSize = Window.Size.ToNum();
 
-        VulkanSwapchain?.Recreate(size);
+        Graphics.Resize(size);
         OnWindowResize(WindowSize);
     }
 
@@ -244,9 +301,9 @@ public abstract class PhoenixGame : IDisposable
         SoundManager.Shutdown();
         OnClose();
 
-        VulkanSwapchain?.Dispose();
-        VulkanContext?.Dispose();
+        Graphics.Dispose();
     }
+
 
     /// <summary>
     /// Extracts and assigns the default framework window icon.

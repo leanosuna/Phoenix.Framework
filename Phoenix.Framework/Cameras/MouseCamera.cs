@@ -1,45 +1,52 @@
-﻿using Phoenix.Framework.Maths;
-
+using Phoenix.Framework.Maths;
 using System.Numerics;
 
-namespace Phoenix.Framework.Cameras
+namespace Phoenix.Framework.Cameras;
+
+public abstract class MouseCamera : BaseCamera
 {
-    public abstract class MouseCamera : BaseCamera
+    public float MoveSpeed = 10f;
+    public bool MouseAim = true;
+    internal PhoenixGame _game;
+
+    /// <summary>
+    /// Initializes a mouse-controlled camera bound to the game instance.
+    /// </summary>
+    public MouseCamera(PhoenixGame game, Vector3 position, float yaw, float pitch, float fov, float nearPlane, float farPlane, float aspectRatio)
+        : base(position, yaw, pitch, fov, nearPlane, farPlane, aspectRatio)
     {
-        public float MoveSpeed = 10f;
-        public bool MouseAim = true;
-        internal PhoenixGame _game;
+        _game = game;
+    }
 
-        public MouseCamera(PhoenixGame game, Vector3 position, float yaw, float pitch, float fov, float nearPlane, float farPlane, float aspectRatio)
-           : base(position, yaw, pitch, fov, nearPlane, farPlane, aspectRatio)
+    /// <summary>
+    /// Updates camera orientation from mouse delta inputs.
+    /// </summary>
+    public override void Update(double deltaTime)
+    {
+        CalculateMouseAim();
+    }
+
+    /// <summary>
+    /// Reads mouse delta and adjusts yaw and pitch angles accordingly.
+    /// </summary>
+    protected void CalculateMouseAim()
+    {
+        if (!MouseAim)
+            return;
+
+        var mouseDelta = _game.Input.MouseDelta;
+        if (mouseDelta != Vector2.Zero)
         {
-            _game = game;
-        }
+            Yaw += mouseDelta.X;
+            Pitch -= mouseDelta.Y;
 
-        public override void Update(double deltaTime)
-        {
-            CalculateMouseAim();
-        }
+            var maxAbs = MathHelper.PiOver2 - 0.0001f;
 
-        protected void CalculateMouseAim()
-        {
-            if (!MouseAim)
-                return;
+            Pitch = Math.Clamp(Pitch, -maxAbs, maxAbs);
 
-            var mouseDelta = _game.Input.MouseDelta;
-            if (mouseDelta != Vector2.Zero)
-            {
-                Yaw += mouseDelta.X;
-                Pitch -= mouseDelta.Y;
-
-                var maxAbs = MathHelper.PiOver2 - 0.0001f;
-
-                Pitch = Math.Clamp(Pitch, -maxAbs, maxAbs);
-
-                CalculateVectors();
-                CalculateView();
-            }
-
+            CalculateVectors();
+            CalculateView();
         }
     }
 }
+

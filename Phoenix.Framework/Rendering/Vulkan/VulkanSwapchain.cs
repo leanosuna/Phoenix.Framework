@@ -1,3 +1,4 @@
+using Phoenix;
 using Silk.NET.Maths;
 using Silk.NET.Vulkan;
 using Silk.NET.Windowing;
@@ -6,8 +7,9 @@ using VkSemaphore = Silk.NET.Vulkan.Semaphore;
 
 namespace Phoenix.Framework.Rendering.Vulkan;
 
-internal sealed unsafe class VulkanSwapchain : IDisposable
+public sealed unsafe class VulkanSwapchain : IDisposable
 {
+
     public const int MaxFramesInFlight = 2;
 
     private readonly VulkanContext _context;
@@ -18,11 +20,16 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
     private Extent2D _extent;
     private Image[] _images = [];
     private ImageView[] _imageViews = [];
+    private Image _depthImage;
+    private DeviceMemory _depthImageMemory;
+    private ImageView _depthImageView;
+    private Format _depthFormat;
     private CommandPool _commandPool;
     private CommandBuffer[] _commandBuffers = new CommandBuffer[MaxFramesInFlight];
     private VkSemaphore[] _imageAvailableSemaphores = new VkSemaphore[MaxFramesInFlight];
     private VkSemaphore[] _renderFinishedSemaphores = [];
     private Fence[] _inFlightFences = new Fence[MaxFramesInFlight];
+    private PresentModeKHR _presentMode;
     private int _currentFrame;
     private bool _disposed;
 
@@ -31,6 +38,23 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
     public Extent2D Extent => _extent;
     public int CurrentFrame => _currentFrame;
     public uint ImageCount => (uint)_images.Length;
+    public Image DepthImage => _depthImage;
+    public ImageView DepthImageView => _depthImageView;
+    public Format DepthFormat => _depthFormat;
+    public PresentModeKHR PresentMode => _presentMode;
+    public bool IsVSyncEnabled => _presentMode is PresentModeKHR.FifoKhr;
+
+
+    /// <summary>
+    /// Returns the color image view for a given swapchain image index.
+    /// </summary>
+    public ImageView GetImageView(uint index) => _imageViews[index];
+
+    /// <summary>
+    /// Returns the color image handle for a given swapchain image index.
+    /// </summary>
+    public Image GetImage(uint index) => _images[index];
+
 
     /// <summary>
     /// Initializes the Vulkan swapchain, image views, command buffers, and frames-in-flight synchronization primitives.
@@ -42,9 +66,11 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
 
         CreateSwapchain(_window.FramebufferSize);
         CreateImageViews();
+        CreateDepthResources();
         CreateCommandPoolAndBuffers();
         CreateSyncObjects();
     }
+
 
     /// <summary>
     /// Queries surface formats and capabilities to create or recreate the VkSwapchainKHR.
@@ -62,7 +88,7 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
         _imageFormat = surfaceFormat.Format;
         _colorSpace = surfaceFormat.ColorSpace;
 
-        var presentMode = ChooseSwapPresentMode();
+        _presentMode = ChooseSwapPresentMode();
         _extent = ChooseSwapExtent(capabilities, size);
 
         uint imageCount = capabilities.MinImageCount + 1;
@@ -81,10 +107,11 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
             ImageUsage = ImageUsageFlags.ColorAttachmentBit | ImageUsageFlags.TransferDstBit,
             PreTransform = capabilities.CurrentTransform,
             CompositeAlpha = CompositeAlphaFlagsKHR.OpaqueBitKhr,
-            PresentMode = presentMode,
+            PresentMode = _presentMode,
             Clipped = true,
             OldSwapchain = oldSwapchain
         };
+
 
         uint* queueFamilyIndices = stackalloc uint[] { _context.GraphicsFamilyIndex, _context.PresentFamilyIndex };
         if (_context.GraphicsFamilyIndex != _context.PresentFamilyIndex)
@@ -140,9 +167,90 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
     }
 
     /// <summary>
+    /// Finds a supported depth format, creates the depth buffer image, allocates device memory, and creates the depth image view.
+    /// </summary>
+    private void CreateDepthResources()
+    {
+        _depthFormat = _context.FindSupportedFormat(
+            [Format.D32Sfloat, Format.D32SfloatS8Uint, Format.D24UnormS8Uint],
+            ImageTiling.Optimal,
+            FormatFeatureFlags.DepthStencilAttachmentBit);
+
+        ImageCreateInfo imageInfo = new()
+        {
+            SType = StructureType.ImageCreateInfo,
+            ImageType = ImageType.Type2D,
+            Extent = new Extent3D(_extent.Width, _extent.Height, 1),
+            MipLevels = 1,
+            ArrayLayers = 1,
+            Format = _depthFormat,
+            Tiling = ImageTiling.Optimal,
+            InitialLayout = ImageLayout.Undefined,
+            Usage = ImageUsageFlags.DepthStencilAttachmentBit,
+            SharingMode = SharingMode.Exclusive,
+            Samples = SampleCountFlags.Count1Bit
+        };
+
+        VulkanHelper.Check(_context.Vk.CreateImage(_context.Device, in imageInfo, null, out _depthImage),
+            "Failed to create depth image.");
+
+        _context.Vk.GetImageMemoryRequirements(_context.Device, _depthImage, out var memReqs);
+
+        MemoryAllocateInfo allocInfo = new()
+        {
+            SType = StructureType.MemoryAllocateInfo,
+            AllocationSize = memReqs.Size,
+            MemoryTypeIndex = _context.FindMemoryType(memReqs.MemoryTypeBits, MemoryPropertyFlags.DeviceLocalBit)
+        };
+
+        VulkanHelper.Check(_context.Vk.AllocateMemory(_context.Device, in allocInfo, null, out _depthImageMemory),
+            "Failed to allocate depth image memory.");
+
+        VulkanHelper.Check(_context.Vk.BindImageMemory(_context.Device, _depthImage, _depthImageMemory, 0),
+            "Failed to bind depth image memory.");
+
+        ImageViewCreateInfo viewInfo = new()
+        {
+            SType = StructureType.ImageViewCreateInfo,
+            Image = _depthImage,
+            ViewType = ImageViewType.Type2D,
+            Format = _depthFormat,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.DepthBit, 0, 1, 0, 1)
+        };
+
+        VulkanHelper.Check(_context.Vk.CreateImageView(_context.Device, in viewInfo, null, out _depthImageView),
+            "Failed to create depth image view.");
+    }
+
+    /// <summary>
+    /// Destroys the depth image view, frees depth image device memory, and destroys the depth image.
+    /// </summary>
+    private void DestroyDepthResources()
+    {
+        if (_depthImageView.Handle != 0)
+        {
+            _context.Vk.DestroyImageView(_context.Device, _depthImageView, null);
+            _depthImageView = default;
+        }
+
+        if (_depthImageMemory.Handle != 0)
+        {
+            _context.Vk.FreeMemory(_context.Device, _depthImageMemory, null);
+            _depthImageMemory = default;
+        }
+
+        if (_depthImage.Handle != 0)
+        {
+            _context.Vk.DestroyImage(_context.Device, _depthImage, null);
+            _depthImage = default;
+        }
+    }
+
+    /// <summary>
     /// Creates the command pool and allocates primary command buffers for each frame in flight.
     /// </summary>
     private void CreateCommandPoolAndBuffers()
+
     {
         CommandPoolCreateInfo poolInfo = new()
         {
@@ -237,7 +345,8 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
     }
 
     /// <summary>
-    /// Selects the swapchain present mode, preferring Mailbox for low latency, falling back to Fifo.
+    /// Selects the swapchain present mode based on VSync configuration and device capabilities.
+    /// When VSync is disabled, prefers Immediate or Mailbox; when enabled, uses Fifo.
     /// </summary>
     private PresentModeKHR ChooseSwapPresentMode()
     {
@@ -249,14 +358,26 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
             _context.KhrSurface.GetPhysicalDeviceSurfacePresentModes(_context.PhysicalDevice, _context.Surface, ref count, pModes);
         }
 
-        foreach (var mode in modes)
+        PresentModeKHR selected;
+        if (!_window.VSync)
         {
-            if (mode == PresentModeKHR.MailboxKhr)
-                return mode;
+            if (modes.Contains(PresentModeKHR.ImmediateKhr))
+                selected = PresentModeKHR.ImmediateKhr;
+            else if (modes.Contains(PresentModeKHR.MailboxKhr))
+                selected = PresentModeKHR.MailboxKhr;
+            else
+                selected = PresentModeKHR.FifoKhr;
+        }
+        else
+        {
+            selected = PresentModeKHR.FifoKhr;
         }
 
-        return PresentModeKHR.FifoKhr;
+        Log.Info($"[VulkanSwapchain] Present mode selected: {selected} (VSync: {_window.VSync}, Available: [{string.Join(", ", modes)}])");
+        return selected;
     }
+
+
 
     /// <summary>
     /// Calculates the swapchain image extent clamped to the physical device surface capabilities.
@@ -470,6 +591,9 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
         if (newSize.X <= 0 || newSize.Y <= 0)
             return;
 
+        if (_extent.Width == (uint)newSize.X && _extent.Height == (uint)newSize.Y && IsVSyncEnabled == _window.VSync)
+            return;
+
         _context.Vk.DeviceWaitIdle(_context.Device);
 
         for (int i = 0; i < _renderFinishedSemaphores.Length; i++)
@@ -482,11 +606,14 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
             _context.Vk.DestroyImageView(_context.Device, _imageViews[i], null);
         }
 
+        DestroyDepthResources();
+
         var oldSwapchain = _swapchain;
         CreateSwapchain(newSize, oldSwapchain);
         _context.KhrSwapchain.DestroySwapchain(_context.Device, oldSwapchain, null);
 
         CreateImageViews();
+        CreateDepthResources();
         CreateImageSemaphores();
     }
 
@@ -513,6 +640,8 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
 
         _context.Vk.DestroyCommandPool(_context.Device, _commandPool, null);
 
+        DestroyDepthResources();
+
         for (int i = 0; i < _imageViews.Length; i++)
         {
             _context.Vk.DestroyImageView(_context.Device, _imageViews[i], null);
@@ -523,3 +652,4 @@ internal sealed unsafe class VulkanSwapchain : IDisposable
         _disposed = true;
     }
 }
+
