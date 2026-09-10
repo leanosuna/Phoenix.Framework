@@ -29,6 +29,7 @@ public sealed unsafe class VulkanContext : IDisposable
     private readonly uint? _transferFamilyIndex;
     private readonly ExtDebugUtils? _extDebugUtils;
     private readonly DebugUtilsMessengerEXT _debugMessenger;
+    private CommandPool _utilityCommandPool;
     private bool _disposed;
 
     public Vk Vk => _vk;
@@ -58,19 +59,21 @@ public sealed unsafe class VulkanContext : IDisposable
             throw new NotSupportedException("Vulkan surface extension (VK_KHR_surface) is not available.");
 
         var windowSurface = (window as IVkSurface) ?? window.VkSurface
-            ?? throw new InvalidOperationException("Failed to resolve Vulkan surface provider from window.");
+            ?? throw new NotSupportedException("Window does not implement IVkSurface.");
+        _surface = windowSurface.Create<AllocationCallbacks>(_instance.ToHandle(), null).ToSurface();
 
-        var surfaceHandle = windowSurface.Create<AllocationCallbacks>(new VkHandle(_instance.Handle), null);
-        _surface = new SurfaceKHR(surfaceHandle.Handle);
-
-        _physicalDevice = SelectPhysicalDevice(_instance, _surface, out _physicalDeviceProperties,
+        _physicalDevice = SelectPhysicalDevice(_instance, _surface,
+            out _physicalDeviceProperties,
             out _graphicsFamilyIndex, out _presentFamilyIndex, out _transferFamilyIndex);
 
-        _device = CreateLogicalDevice(_physicalDevice, _graphicsFamilyIndex, _presentFamilyIndex, _transferFamilyIndex,
+        _device = CreateLogicalDevice(_physicalDevice,
+            _graphicsFamilyIndex, _presentFamilyIndex, _transferFamilyIndex,
             out _graphicsQueue, out _presentQueue, out _transferQueue);
 
         if (!_vk.TryGetDeviceExtension(_instance, _device, out _khrSwapchain))
-            throw new NotSupportedException("Vulkan swapchain extension (VK_KHR_swapchain) is not available.");
+            throw new NotSupportedException("Vulkan swapchain extension (VK_KHR_swapchain) is not available on selected device.");
+
+        CreateUtilityCommandPool();
     }
 
     /// <summary>
@@ -332,13 +335,19 @@ public sealed unsafe class VulkanContext : IDisposable
     }
 
     /// <summary>
-    /// Verifies that the physical device supports Vulkan 1.3 dynamic rendering and synchronization2.
+    /// Verifies that the physical device supports Vulkan 1.3 dynamic rendering, synchronization2, and Vulkan 1.2 descriptor indexing.
     /// </summary>
     private bool CheckDeviceFeatureSupport(PhysicalDevice device)
     {
+        PhysicalDeviceVulkan12Features features12 = new()
+        {
+            SType = StructureType.PhysicalDeviceVulkan12Features
+        };
+
         PhysicalDeviceVulkan13Features features13 = new()
         {
-            SType = StructureType.PhysicalDeviceVulkan13Features
+            SType = StructureType.PhysicalDeviceVulkan13Features,
+            PNext = &features12
         };
 
         PhysicalDeviceFeatures2 features2 = new()
@@ -348,7 +357,14 @@ public sealed unsafe class VulkanContext : IDisposable
         };
 
         _vk.GetPhysicalDeviceFeatures2(device, &features2);
-        return features13.DynamicRendering && features13.Synchronization2;
+        return features2.Features.SamplerAnisotropy &&
+               features13.DynamicRendering &&
+               features13.Synchronization2 &&
+               features12.DescriptorBindingPartiallyBound &&
+               features12.RuntimeDescriptorArray &&
+               features12.DescriptorBindingSampledImageUpdateAfterBind &&
+               features12.ShaderSampledImageArrayNonUniformIndexing &&
+               features12.DescriptorIndexing;
     }
 
     /// <summary>
@@ -381,17 +397,34 @@ public sealed unsafe class VulkanContext : IDisposable
         if (availableExtensions.Contains("VK_KHR_portability_subset"))
             enabledExtensions.Add("VK_KHR_portability_subset");
 
+        PhysicalDeviceVulkan12Features features12 = new()
+        {
+            SType = StructureType.PhysicalDeviceVulkan12Features,
+            DescriptorBindingPartiallyBound = true,
+            RuntimeDescriptorArray = true,
+            DescriptorBindingSampledImageUpdateAfterBind = true,
+            ShaderSampledImageArrayNonUniformIndexing = true,
+            DescriptorIndexing = true
+        };
+
         PhysicalDeviceVulkan13Features features13 = new()
         {
             SType = StructureType.PhysicalDeviceVulkan13Features,
+            PNext = &features12,
             DynamicRendering = true,
             Synchronization2 = true
+        };
+
+        PhysicalDeviceFeatures features10 = new()
+        {
+            SamplerAnisotropy = true
         };
 
         PhysicalDeviceFeatures2 features2 = new()
         {
             SType = StructureType.PhysicalDeviceFeatures2,
-            PNext = &features13
+            PNext = &features13,
+            Features = features10
         };
 
         using var marshaledExtensions = new MarshaledStringArray([.. enabledExtensions]);
@@ -531,6 +564,72 @@ public sealed unsafe class VulkanContext : IDisposable
     }
 
     /// <summary>
+    /// Creates a transient command pool for one-time GPU transfer and synchronization commands.
+    /// </summary>
+    private void CreateUtilityCommandPool()
+    {
+        CommandPoolCreateInfo poolInfo = new()
+        {
+            SType = StructureType.CommandPoolCreateInfo,
+            Flags = CommandPoolCreateFlags.TransientBit,
+            QueueFamilyIndex = _graphicsFamilyIndex
+        };
+
+        VulkanHelper.Check(_vk.CreateCommandPool(_device, in poolInfo, null, out _utilityCommandPool),
+            "Failed to create utility command pool.");
+    }
+
+    /// <summary>
+    /// Begins recording a one-time command buffer for immediate GPU transfer or barrier commands.
+    /// </summary>
+    public CommandBuffer BeginSingleTimeCommands()
+    {
+        CommandBufferAllocateInfo allocInfo = new()
+        {
+            SType = StructureType.CommandBufferAllocateInfo,
+            Level = CommandBufferLevel.Primary,
+            CommandPool = _utilityCommandPool,
+            CommandBufferCount = 1
+        };
+
+        VulkanHelper.Check(_vk.AllocateCommandBuffers(_device, in allocInfo, out var commandBuffer),
+            "Failed to allocate single-time command buffer.");
+
+        CommandBufferBeginInfo beginInfo = new()
+        {
+            SType = StructureType.CommandBufferBeginInfo,
+            Flags = CommandBufferUsageFlags.OneTimeSubmitBit
+        };
+
+        VulkanHelper.Check(_vk.BeginCommandBuffer(commandBuffer, in beginInfo),
+            "Failed to begin single-time command buffer.");
+
+        return commandBuffer;
+    }
+
+    /// <summary>
+    /// Ends recording, submits the single-time command buffer to the graphics queue, and waits for completion.
+    /// </summary>
+    public void EndSingleTimeCommands(CommandBuffer commandBuffer)
+    {
+        VulkanHelper.Check(_vk.EndCommandBuffer(commandBuffer),
+            "Failed to end single-time command buffer.");
+
+        SubmitInfo submitInfo = new()
+        {
+            SType = StructureType.SubmitInfo,
+            CommandBufferCount = 1,
+            PCommandBuffers = &commandBuffer
+        };
+
+        VulkanHelper.Check(_vk.QueueSubmit(_graphicsQueue, 1, in submitInfo, default),
+            "Failed to submit single-time command buffer to graphics queue.");
+
+        _vk.QueueWaitIdle(_graphicsQueue);
+        _vk.FreeCommandBuffers(_device, _utilityCommandPool, 1, in commandBuffer);
+    }
+
+    /// <summary>
     /// Destroys all Vulkan device, surface, and instance resources.
     /// </summary>
     public void Dispose()
@@ -539,6 +638,12 @@ public sealed unsafe class VulkanContext : IDisposable
             return;
 
         _vk.DeviceWaitIdle(_device);
+
+        if (_utilityCommandPool.Handle != 0)
+        {
+            _vk.DestroyCommandPool(_device, _utilityCommandPool, null);
+            _utilityCommandPool = default;
+        }
 
         _khrSwapchain.Dispose();
         _vk.DestroyDevice(_device, null);

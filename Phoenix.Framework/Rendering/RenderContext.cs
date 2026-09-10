@@ -9,6 +9,7 @@ public sealed unsafe class RenderContext
     private readonly VulkanContext _context;
     private readonly VulkanSwapchain _swapchain;
     private readonly CommonUBOManager _commonUbo;
+    private readonly BindlessManager _bindlessManager;
     private CommandBuffer _commandBuffer;
     private uint _imageIndex;
     private int _currentFrame;
@@ -20,13 +21,14 @@ public sealed unsafe class RenderContext
     public int CurrentFrame => _currentFrame;
 
     /// <summary>
-    /// Initializes the rendering context bound to the active Vulkan context, swapchain, and uniform manager.
+    /// Initializes the rendering context bound to the active Vulkan context, swapchain, uniform manager, and bindless manager.
     /// </summary>
-    internal RenderContext(VulkanContext context, VulkanSwapchain swapchain, CommonUBOManager commonUbo)
+    internal RenderContext(VulkanContext context, VulkanSwapchain swapchain, CommonUBOManager commonUbo, BindlessManager bindlessManager)
     {
         _context = context;
         _swapchain = swapchain;
         _commonUbo = commonUbo;
+        _bindlessManager = bindlessManager;
     }
 
     /// <summary>
@@ -182,14 +184,18 @@ public sealed unsafe class RenderContext
     }
 
     /// <summary>
-    /// Binds a graphics pipeline and automatically binds the CommonUBO descriptor set to Set 0.
+    /// Binds a graphics pipeline and automatically binds CommonUBO to Set 0 and bindless textures to Set 1.
     /// </summary>
     public void BindPipeline(VulkanPipeline pipeline)
     {
         _context.Vk.CmdBindPipeline(_commandBuffer, pipeline.BindPoint, pipeline.Pipeline);
 
-        var uboSet = _commonUbo.GetDescriptorSet(_currentFrame);
-        _context.Vk.CmdBindDescriptorSets(_commandBuffer, pipeline.BindPoint, pipeline.Layout, 0, 1, in uboSet, 0, null);
+        DescriptorSet* sets = stackalloc DescriptorSet[]
+        {
+            _commonUbo.GetDescriptorSet(_currentFrame),
+            _bindlessManager.DescriptorSet
+        };
+        _context.Vk.CmdBindDescriptorSets(_commandBuffer, pipeline.BindPoint, pipeline.Layout, 0, 2, sets, 0, null);
     }
 
     /// <summary>
