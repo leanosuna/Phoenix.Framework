@@ -1,17 +1,8 @@
-﻿using Riptide;
+using Riptide;
 using System.Numerics;
 
 namespace Phoenix.Framework.Network
 {
-    public enum ClientToServer : ushort
-    {
-        PlayerIdentity
-    }
-    public enum ServerToClient : ushort
-    {
-        AllPlayerData,
-    }
-
     public static class MessageExtensions
     {
         #region Vector2

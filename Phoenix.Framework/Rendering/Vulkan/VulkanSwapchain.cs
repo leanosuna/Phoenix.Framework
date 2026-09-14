@@ -553,21 +553,26 @@ public sealed unsafe class VulkanSwapchain : IDisposable
             PSignalSemaphores = &signalSemaphore
         };
 
-        VulkanHelper.Check(vk.QueueSubmit(_context.GraphicsQueue, 1, in submitInfo, fence),
-            "Failed to submit command buffer to graphics queue.");
-
-        var swapchain = _swapchain;
-        PresentInfoKHR presentInfo = new()
+        Result presentResult;
+        lock (_context.GraphicsQueueLock)
         {
-            SType = StructureType.PresentInfoKhr,
-            WaitSemaphoreCount = 1,
-            PWaitSemaphores = &signalSemaphore,
-            SwapchainCount = 1,
-            PSwapchains = &swapchain,
-            PImageIndices = &imageIndex
-        };
+            VulkanHelper.Check(vk.QueueSubmit(_context.GraphicsQueue, 1, in submitInfo, fence),
+                "Failed to submit command buffer to graphics queue.");
 
-        var presentResult = _context.KhrSwapchain.QueuePresent(_context.PresentQueue, in presentInfo);
+            var swapchain = _swapchain;
+            PresentInfoKHR presentInfo = new()
+            {
+                SType = StructureType.PresentInfoKhr,
+                WaitSemaphoreCount = 1,
+                PWaitSemaphores = &signalSemaphore,
+                SwapchainCount = 1,
+                PSwapchains = &swapchain,
+                PImageIndices = &imageIndex
+            };
+
+            presentResult = _context.KhrSwapchain.QueuePresent(_context.PresentQueue, in presentInfo);
+        }
+
         switch (presentResult)
         {
             case Result.ErrorOutOfDateKhr or Result.SuboptimalKhr:
@@ -594,27 +599,30 @@ public sealed unsafe class VulkanSwapchain : IDisposable
         if (_extent.Width == (uint)newSize.X && _extent.Height == (uint)newSize.Y && IsVSyncEnabled == _window.VSync)
             return;
 
-        _context.Vk.DeviceWaitIdle(_context.Device);
-
-        for (int i = 0; i < _renderFinishedSemaphores.Length; i++)
+        lock (_context.GraphicsQueueLock)
         {
-            _context.Vk.DestroySemaphore(_context.Device, _renderFinishedSemaphores[i], null);
+            _context.Vk.DeviceWaitIdle(_context.Device);
+
+            for (int i = 0; i < _renderFinishedSemaphores.Length; i++)
+            {
+                _context.Vk.DestroySemaphore(_context.Device, _renderFinishedSemaphores[i], null);
+            }
+
+            for (int i = 0; i < _imageViews.Length; i++)
+            {
+                _context.Vk.DestroyImageView(_context.Device, _imageViews[i], null);
+            }
+
+            DestroyDepthResources();
+
+            var oldSwapchain = _swapchain;
+            CreateSwapchain(newSize, oldSwapchain);
+            _context.KhrSwapchain.DestroySwapchain(_context.Device, oldSwapchain, null);
+
+            CreateImageViews();
+            CreateDepthResources();
+            CreateImageSemaphores();
         }
-
-        for (int i = 0; i < _imageViews.Length; i++)
-        {
-            _context.Vk.DestroyImageView(_context.Device, _imageViews[i], null);
-        }
-
-        DestroyDepthResources();
-
-        var oldSwapchain = _swapchain;
-        CreateSwapchain(newSize, oldSwapchain);
-        _context.KhrSwapchain.DestroySwapchain(_context.Device, oldSwapchain, null);
-
-        CreateImageViews();
-        CreateDepthResources();
-        CreateImageSemaphores();
     }
 
     /// <summary>
@@ -625,14 +633,16 @@ public sealed unsafe class VulkanSwapchain : IDisposable
         if (_disposed)
             return;
 
-        _context.Vk.DeviceWaitIdle(_context.Device);
-
-        for (int i = 0; i < _renderFinishedSemaphores.Length; i++)
+        lock (_context.GraphicsQueueLock)
         {
-            _context.Vk.DestroySemaphore(_context.Device, _renderFinishedSemaphores[i], null);
-        }
+            _context.Vk.DeviceWaitIdle(_context.Device);
 
-        for (int i = 0; i < MaxFramesInFlight; i++)
+            for (int i = 0; i < _renderFinishedSemaphores.Length; i++)
+            {
+                _context.Vk.DestroySemaphore(_context.Device, _renderFinishedSemaphores[i], null);
+            }
+
+            for (int i = 0; i < MaxFramesInFlight; i++)
         {
             _context.Vk.DestroySemaphore(_context.Device, _imageAvailableSemaphores[i], null);
             _context.Vk.DestroyFence(_context.Device, _inFlightFences[i], null);
@@ -648,8 +658,8 @@ public sealed unsafe class VulkanSwapchain : IDisposable
         }
 
         _context.KhrSwapchain.DestroySwapchain(_context.Device, _swapchain, null);
+        }
 
         _disposed = true;
     }
 }
-

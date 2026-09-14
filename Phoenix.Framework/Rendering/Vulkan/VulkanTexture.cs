@@ -1,3 +1,5 @@
+using Phoenix.Framework.AssetImport;
+using Phoenix.Framework.AssetImport.Processing;
 using Silk.NET.Vulkan;
 using SixLabors.ImageSharp.PixelFormats;
 using VkImage = Silk.NET.Vulkan.Image;
@@ -5,7 +7,8 @@ using VkImage = Silk.NET.Vulkan.Image;
 namespace Phoenix.Framework.Rendering.Vulkan;
 
 /// <summary>
-/// Encapsulates a GPU-resident 2D texture, staging upload pipeline, image view, and bindless descriptor registration.
+/// Encapsulates a GPU-resident 2D texture, staging upload pipeline, optional GPU mipmap generation,
+/// image view, and bindless descriptor registration with custom or default sampling states.
 /// </summary>
 public sealed unsafe class VulkanTexture : IDisposable
 {
@@ -16,62 +19,120 @@ public sealed unsafe class VulkanTexture : IDisposable
     private ImageView _imageView;
     private readonly uint _width;
     private readonly uint _height;
+    private readonly uint _mipLevels;
     private readonly Format _format;
     private readonly uint _textureId;
+    private readonly bool _ownsSlot;
+    private readonly Sampler _sampler;
     private bool _disposed;
 
     public VkImage Image => _image;
     public DeviceMemory Memory => _memory;
     public ImageView ImageView => _imageView;
+    public Sampler Sampler => _sampler;
     public uint Width => _width;
     public uint Height => _height;
+    public uint MipLevels => _mipLevels;
     public Format Format => _format;
     public uint TextureId => _textureId;
+    public TextureLoadOptions Options { get; }
 
     /// <summary>
-    /// Creates a GPU image, uploads raw pixel data via a staging buffer with synchronization2 pipeline barriers,
+    /// Creates a GPU image, uploads raw pixel data via a staging buffer with optional GPU mipmap generation,
     /// creates an image view, and registers the texture in the global bindless manager.
     /// </summary>
     public VulkanTexture(VulkanContext context, BindlessManager bindless, int width, int height,
-        ReadOnlySpan<byte> pixelData, Format format = Format.R8G8B8A8Unorm, bool isDefaultSlot0 = false)
+        ReadOnlySpan<byte> pixelData, TextureLoadOptions? options = null, Format format = Format.R8G8B8A8Unorm,
+        bool isDefaultSlot0 = false, uint? preallocatedSlot = null)
     {
         _context = context;
         _bindlessManager = bindless;
         _width = (uint)width;
         _height = (uint)height;
         _format = format;
+        Options = options ?? new TextureLoadOptions();
+        _mipLevels = Options.GenerateMipmaps ? (uint)Math.Floor(Math.Log2(Math.Max(width, height))) + 1 : 1;
+        _ownsSlot = !isDefaultSlot0 && !preallocatedSlot.HasValue;
 
-        CreateImage(width, height, format);
+        CreateImage(width, height, format, _mipLevels);
         UploadPixels(width, height, pixelData);
-        CreateImageView(format);
+        CreateImageView(format, _mipLevels);
 
         if (isDefaultSlot0)
         {
             _textureId = 0;
-            _bindlessManager.UpdateDescriptor(0, _imageView, _bindlessManager.DefaultSampler);
+            _sampler = _bindlessManager.DefaultSampler;
+            _bindlessManager.UpdateDescriptor(0, _imageView, _sampler);
+        }
+        else if (preallocatedSlot.HasValue)
+        {
+            _textureId = preallocatedSlot.Value;
+            var samplerDesc = SamplerDescription.FromTextureOptions(Options);
+            _sampler = _bindlessManager.SamplerManager.GetOrCreateSampler(samplerDesc);
+            _bindlessManager.UpdateDescriptor(_textureId, _imageView, _sampler);
         }
         else
         {
-            _textureId = _bindlessManager.RegisterTexture(_imageView);
+            var samplerDesc = SamplerDescription.FromTextureOptions(Options);
+            _sampler = _bindlessManager.SamplerManager.GetOrCreateSampler(samplerDesc);
+            _textureId = _bindlessManager.RegisterTexture(_imageView, in samplerDesc);
+        }
+    }
+
+    /// <summary>
+    /// Creates a GPU image from pre-compressed BCn mipmap chain data, uploads via a staging buffer,
+    /// creates an image view, and registers into the bindless manager (or updates a preallocated slot).
+    /// </summary>
+    public VulkanTexture(VulkanContext context, BindlessManager bindless, CompressedTextureData data,
+        TextureLoadOptions? options = null, uint? preallocatedSlot = null)
+    {
+        _context = context;
+        _bindlessManager = bindless;
+        _width = (uint)data.Width;
+        _height = (uint)data.Height;
+        Options = options ?? new TextureLoadOptions();
+        _mipLevels = (uint)data.Mips.Count;
+        _format = MapFormat(data.Format, data.IsSRgb);
+        _ownsSlot = !preallocatedSlot.HasValue;
+
+        CreateImage(data.Width, data.Height, _format, _mipLevels);
+        UploadCompressedMips(data.Mips);
+        CreateImageView(_format, _mipLevels);
+
+        var samplerDesc = SamplerDescription.FromTextureOptions(Options);
+        _sampler = _bindlessManager.SamplerManager.GetOrCreateSampler(samplerDesc);
+
+        if (preallocatedSlot.HasValue)
+        {
+            _textureId = preallocatedSlot.Value;
+            _bindlessManager.UpdateDescriptor(_textureId, _imageView, _sampler);
+        }
+        else
+        {
+            _textureId = _bindlessManager.RegisterTexture(_imageView, _sampler);
         }
     }
 
     /// <summary>
     /// Allocates optimal GPU device-local memory and creates the VkImage handle.
     /// </summary>
-    private void CreateImage(int width, int height, Format format)
+    private void CreateImage(int width, int height, Format format, uint mipLevels)
     {
+        ImageUsageFlags usage = ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit;
+        if (mipLevels > 1)
+            usage |= ImageUsageFlags.TransferSrcBit;
+
         ImageCreateInfo imageInfo = new()
         {
             SType = StructureType.ImageCreateInfo,
             ImageType = ImageType.Type2D,
             Extent = new Extent3D((uint)width, (uint)height, 1),
-            MipLevels = 1,
+            MipLevels = mipLevels,
             ArrayLayers = 1,
             Format = format,
             Tiling = ImageTiling.Optimal,
             InitialLayout = ImageLayout.Undefined,
-            Usage = ImageUsageFlags.TransferDstBit | ImageUsageFlags.SampledBit,
+            Usage = usage,
             SharingMode = SharingMode.Exclusive,
             Samples = SampleCountFlags.Count1Bit
         };
@@ -142,6 +203,103 @@ public sealed unsafe class VulkanTexture : IDisposable
 
         _context.Vk.CmdCopyBufferToImage(cmd, stagingBuffer.Buffer, _image, ImageLayout.TransferDstOptimal, 1, in region);
 
+        if (_mipLevels > 1)
+        {
+            GenerateMipmaps(cmd, width, height, _mipLevels);
+        }
+        else
+        {
+            ImageMemoryBarrier2 barrierToShader = new()
+            {
+                SType = StructureType.ImageMemoryBarrier2,
+                SrcStageMask = PipelineStageFlags2.TransferBit,
+                SrcAccessMask = AccessFlags2.TransferWriteBit,
+                DstStageMask = PipelineStageFlags2.FragmentShaderBit,
+                DstAccessMask = AccessFlags2.ShaderReadBit,
+                OldLayout = ImageLayout.TransferDstOptimal,
+                NewLayout = ImageLayout.ShaderReadOnlyOptimal,
+                Image = _image,
+                SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1)
+            };
+
+            DependencyInfo depToShader = new()
+            {
+                SType = StructureType.DependencyInfo,
+                ImageMemoryBarrierCount = 1,
+                PImageMemoryBarriers = &barrierToShader
+            };
+
+            _context.Vk.CmdPipelineBarrier2(cmd, in depToShader);
+        }
+
+        _context.EndSingleTimeCommands(cmd);
+    }
+
+    /// <summary>
+    /// Uploads all pre-compressed mipmap levels from a single contiguous staging buffer and transitions to ShaderReadOnlyOptimal.
+    /// </summary>
+    private void UploadCompressedMips(List<CompressedMipLevel> mips)
+    {
+        ulong totalBytes = 0;
+        for (int i = 0; i < mips.Count; i++)
+        {
+            totalBytes += (ulong)mips[i].Data.Length;
+        }
+
+        using var stagingBuffer = new VulkanBuffer(_context, totalBytes,
+            BufferUsageFlags.TransferSrcBit,
+            MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+
+        ulong currentOffset = 0;
+        BufferImageCopy[] copyRegions = new BufferImageCopy[mips.Count];
+
+        for (int i = 0; i < mips.Count; i++)
+        {
+            var mip = mips[i];
+            stagingBuffer.SetData<byte>(mip.Data.AsSpan(), currentOffset);
+
+            copyRegions[i] = new BufferImageCopy
+            {
+                BufferOffset = currentOffset,
+                BufferRowLength = 0,
+                BufferImageHeight = 0,
+                ImageSubresource = new ImageSubresourceLayers(ImageAspectFlags.ColorBit, (uint)i, 0, 1),
+                ImageOffset = new Offset3D(0, 0, 0),
+                ImageExtent = new Extent3D((uint)mip.Width, (uint)mip.Height, 1)
+            };
+
+            currentOffset += (ulong)mip.Data.Length;
+        }
+
+        var cmd = _context.BeginSingleTimeCommands();
+
+        ImageMemoryBarrier2 barrierToDst = new()
+        {
+            SType = StructureType.ImageMemoryBarrier2,
+            SrcStageMask = PipelineStageFlags2.TopOfPipeBit,
+            SrcAccessMask = AccessFlags2.None,
+            DstStageMask = PipelineStageFlags2.TransferBit,
+            DstAccessMask = AccessFlags2.TransferWriteBit,
+            OldLayout = ImageLayout.Undefined,
+            NewLayout = ImageLayout.TransferDstOptimal,
+            Image = _image,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, _mipLevels, 0, 1)
+        };
+
+        DependencyInfo depToDst = new()
+        {
+            SType = StructureType.DependencyInfo,
+            ImageMemoryBarrierCount = 1,
+            PImageMemoryBarriers = &barrierToDst
+        };
+
+        _context.Vk.CmdPipelineBarrier2(cmd, in depToDst);
+
+        fixed (BufferImageCopy* pRegions = copyRegions)
+        {
+            _context.Vk.CmdCopyBufferToImage(cmd, stagingBuffer.Buffer, _image, ImageLayout.TransferDstOptimal, (uint)copyRegions.Length, pRegions);
+        }
+
         ImageMemoryBarrier2 barrierToShader = new()
         {
             SType = StructureType.ImageMemoryBarrier2,
@@ -152,7 +310,7 @@ public sealed unsafe class VulkanTexture : IDisposable
             OldLayout = ImageLayout.TransferDstOptimal,
             NewLayout = ImageLayout.ShaderReadOnlyOptimal,
             Image = _image,
-            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1)
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, _mipLevels, 0, 1)
         };
 
         DependencyInfo depToShader = new()
@@ -168,9 +326,133 @@ public sealed unsafe class VulkanTexture : IDisposable
     }
 
     /// <summary>
-    /// Creates a 2D color image view for sampling the texture.
+    /// Maps framework compression format and color space flag to the corresponding Vulkan format enum.
     /// </summary>
-    private void CreateImageView(Format format)
+    public static Format MapFormat(TextureCompressionFormat format, bool isSRgb) => format switch
+    {
+        TextureCompressionFormat.BC1 => isSRgb ? Format.BC1RgbaSrgbBlock : Format.BC1RgbaUnormBlock,
+        TextureCompressionFormat.BC3 => isSRgb ? Format.BC3SrgbBlock : Format.BC3UnormBlock,
+        TextureCompressionFormat.BC4 => Format.BC4UnormBlock,
+        TextureCompressionFormat.BC5 => Format.BC5UnormBlock,
+        TextureCompressionFormat.BC7 => isSRgb ? Format.BC7SrgbBlock : Format.BC7UnormBlock,
+        _ => isSRgb ? Format.R8G8B8A8Srgb : Format.R8G8B8A8Unorm
+    };
+
+    /// <summary>
+    /// Generates successive mipmap levels on the GPU using hardware-accelerated linear blit operations.
+    /// </summary>
+    private void GenerateMipmaps(CommandBuffer cmd, int width, int height, uint mipLevels)
+    {
+        int mipWidth = width;
+        int mipHeight = height;
+        ImageMemoryBarrier2* barriers = stackalloc ImageMemoryBarrier2[2];
+
+        for (uint i = 1; i < mipLevels; i++)
+        {
+            ImageMemoryBarrier2 barrierSrc = new()
+            {
+                SType = StructureType.ImageMemoryBarrier2,
+                SrcStageMask = PipelineStageFlags2.TransferBit,
+                SrcAccessMask = AccessFlags2.TransferWriteBit,
+                DstStageMask = PipelineStageFlags2.TransferBit,
+                DstAccessMask = AccessFlags2.TransferReadBit,
+                OldLayout = ImageLayout.TransferDstOptimal,
+                NewLayout = ImageLayout.TransferSrcOptimal,
+                Image = _image,
+                SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, i - 1, 1, 0, 1)
+            };
+
+            ImageMemoryBarrier2 barrierDst = new()
+            {
+                SType = StructureType.ImageMemoryBarrier2,
+                SrcStageMask = PipelineStageFlags2.TopOfPipeBit,
+                SrcAccessMask = AccessFlags2.None,
+                DstStageMask = PipelineStageFlags2.TransferBit,
+                DstAccessMask = AccessFlags2.TransferWriteBit,
+                OldLayout = ImageLayout.Undefined,
+                NewLayout = ImageLayout.TransferDstOptimal,
+                Image = _image,
+                SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, i, 1, 0, 1)
+            };
+
+            barriers[0] = barrierSrc;
+            barriers[1] = barrierDst;
+
+            DependencyInfo dep = new()
+            {
+                SType = StructureType.DependencyInfo,
+                ImageMemoryBarrierCount = 2,
+                PImageMemoryBarriers = barriers
+            };
+
+            _context.Vk.CmdPipelineBarrier2(cmd, in dep);
+
+            int nextWidth = mipWidth > 1 ? mipWidth / 2 : 1;
+            int nextHeight = mipHeight > 1 ? mipHeight / 2 : 1;
+
+            ImageBlit blit = new()
+            {
+                SrcOffsets = { [0] = new Offset3D(0, 0, 0), [1] = new Offset3D(mipWidth, mipHeight, 1) },
+                SrcSubresource = new ImageSubresourceLayers(ImageAspectFlags.ColorBit, i - 1, 0, 1),
+                DstOffsets = { [0] = new Offset3D(0, 0, 0), [1] = new Offset3D(nextWidth, nextHeight, 1) },
+                DstSubresource = new ImageSubresourceLayers(ImageAspectFlags.ColorBit, i, 0, 1)
+            };
+
+            _context.Vk.CmdBlitImage(cmd, _image, ImageLayout.TransferSrcOptimal, _image, ImageLayout.TransferDstOptimal, 1, in blit, Filter.Linear);
+
+            ImageMemoryBarrier2 barrierRead = new()
+            {
+                SType = StructureType.ImageMemoryBarrier2,
+                SrcStageMask = PipelineStageFlags2.TransferBit,
+                SrcAccessMask = AccessFlags2.TransferReadBit,
+                DstStageMask = PipelineStageFlags2.FragmentShaderBit,
+                DstAccessMask = AccessFlags2.ShaderReadBit,
+                OldLayout = ImageLayout.TransferSrcOptimal,
+                NewLayout = ImageLayout.ShaderReadOnlyOptimal,
+                Image = _image,
+                SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, i - 1, 1, 0, 1)
+            };
+
+            DependencyInfo depRead = new()
+            {
+                SType = StructureType.DependencyInfo,
+                ImageMemoryBarrierCount = 1,
+                PImageMemoryBarriers = &barrierRead
+            };
+
+            _context.Vk.CmdPipelineBarrier2(cmd, in depRead);
+
+            mipWidth = nextWidth;
+            mipHeight = nextHeight;
+        }
+
+        ImageMemoryBarrier2 barrierLast = new()
+        {
+            SType = StructureType.ImageMemoryBarrier2,
+            SrcStageMask = PipelineStageFlags2.TransferBit,
+            SrcAccessMask = AccessFlags2.TransferWriteBit,
+            DstStageMask = PipelineStageFlags2.FragmentShaderBit,
+            DstAccessMask = AccessFlags2.ShaderReadBit,
+            OldLayout = ImageLayout.TransferDstOptimal,
+            NewLayout = ImageLayout.ShaderReadOnlyOptimal,
+            Image = _image,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, mipLevels - 1, 1, 0, 1)
+        };
+
+        DependencyInfo depLast = new()
+        {
+            SType = StructureType.DependencyInfo,
+            ImageMemoryBarrierCount = 1,
+            PImageMemoryBarriers = &barrierLast
+        };
+
+        _context.Vk.CmdPipelineBarrier2(cmd, in depLast);
+    }
+
+    /// <summary>
+    /// Creates a 2D color image view for sampling the texture across all mip levels.
+    /// </summary>
+    private void CreateImageView(Format format, uint mipLevels)
     {
         ImageViewCreateInfo viewInfo = new()
         {
@@ -178,7 +460,7 @@ public sealed unsafe class VulkanTexture : IDisposable
             Image = _image,
             ViewType = ImageViewType.Type2D,
             Format = format,
-            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1)
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, mipLevels, 0, 1)
         };
 
         VulkanHelper.Check(_context.Vk.CreateImageView(_context.Device, in viewInfo, null, out _imageView),
@@ -188,23 +470,25 @@ public sealed unsafe class VulkanTexture : IDisposable
     /// <summary>
     /// Decodes an image from file and uploads it to the GPU as a bindless texture.
     /// </summary>
-    public static VulkanTexture FromFile(VulkanContext context, BindlessManager bindless, string filePath, Format format = Format.R8G8B8A8Srgb)
+    public static VulkanTexture FromFile(VulkanContext context, BindlessManager bindless, string filePath,
+        TextureLoadOptions? options = null, Format format = Format.R8G8B8A8Srgb)
     {
         using var image = SixLabors.ImageSharp.Image.Load<Rgba32>(filePath);
         byte[] pixels = new byte[image.Width * image.Height * 4];
         image.CopyPixelDataTo(pixels);
-        return new VulkanTexture(context, bindless, image.Width, image.Height, pixels, format);
+        return new VulkanTexture(context, bindless, image.Width, image.Height, pixels, options, format);
     }
 
     /// <summary>
     /// Decodes an image from stream and uploads it to the GPU as a bindless texture.
     /// </summary>
-    public static VulkanTexture FromStream(VulkanContext context, BindlessManager bindless, Stream stream, Format format = Format.R8G8B8A8Srgb)
+    public static VulkanTexture FromStream(VulkanContext context, BindlessManager bindless, Stream stream,
+        TextureLoadOptions? options = null, Format format = Format.R8G8B8A8Srgb)
     {
         using var image = SixLabors.ImageSharp.Image.Load<Rgba32>(stream);
         byte[] pixels = new byte[image.Width * image.Height * 4];
         image.CopyPixelDataTo(pixels);
-        return new VulkanTexture(context, bindless, image.Width, image.Height, pixels, format);
+        return new VulkanTexture(context, bindless, image.Width, image.Height, pixels, options, format);
     }
 
     /// <summary>
@@ -215,7 +499,7 @@ public sealed unsafe class VulkanTexture : IDisposable
         if (_disposed)
             return;
 
-        if (_textureId != 0)
+        if (_ownsSlot && _textureId != 0)
         {
             _bindlessManager.UnregisterTexture(_textureId);
         }

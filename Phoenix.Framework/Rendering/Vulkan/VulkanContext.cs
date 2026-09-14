@@ -30,6 +30,8 @@ public sealed unsafe class VulkanContext : IDisposable
     private readonly ExtDebugUtils? _extDebugUtils;
     private readonly DebugUtilsMessengerEXT _debugMessenger;
     private CommandPool _utilityCommandPool;
+    private readonly object _utilityCommandLock = new();
+    public readonly object GraphicsQueueLock = new();
     private bool _disposed;
 
     public Vk Vk => _vk;
@@ -358,6 +360,7 @@ public sealed unsafe class VulkanContext : IDisposable
 
         _vk.GetPhysicalDeviceFeatures2(device, &features2);
         return features2.Features.SamplerAnisotropy &&
+               features2.Features.TextureCompressionBC &&
                features13.DynamicRendering &&
                features13.Synchronization2 &&
                features12.DescriptorBindingPartiallyBound &&
@@ -417,7 +420,8 @@ public sealed unsafe class VulkanContext : IDisposable
 
         PhysicalDeviceFeatures features10 = new()
         {
-            SamplerAnisotropy = true
+            SamplerAnisotropy = true,
+            TextureCompressionBC = true
         };
 
         PhysicalDeviceFeatures2 features2 = new()
@@ -584,27 +588,36 @@ public sealed unsafe class VulkanContext : IDisposable
     /// </summary>
     public CommandBuffer BeginSingleTimeCommands()
     {
-        CommandBufferAllocateInfo allocInfo = new()
+        System.Threading.Monitor.Enter(_utilityCommandLock);
+        try
         {
-            SType = StructureType.CommandBufferAllocateInfo,
-            Level = CommandBufferLevel.Primary,
-            CommandPool = _utilityCommandPool,
-            CommandBufferCount = 1
-        };
+            CommandBufferAllocateInfo allocInfo = new()
+            {
+                SType = StructureType.CommandBufferAllocateInfo,
+                Level = CommandBufferLevel.Primary,
+                CommandPool = _utilityCommandPool,
+                CommandBufferCount = 1
+            };
 
-        VulkanHelper.Check(_vk.AllocateCommandBuffers(_device, in allocInfo, out var commandBuffer),
-            "Failed to allocate single-time command buffer.");
+            VulkanHelper.Check(_vk.AllocateCommandBuffers(_device, in allocInfo, out var commandBuffer),
+                "Failed to allocate single-time command buffer.");
 
-        CommandBufferBeginInfo beginInfo = new()
+            CommandBufferBeginInfo beginInfo = new()
+            {
+                SType = StructureType.CommandBufferBeginInfo,
+                Flags = CommandBufferUsageFlags.OneTimeSubmitBit
+            };
+
+            VulkanHelper.Check(_vk.BeginCommandBuffer(commandBuffer, in beginInfo),
+                "Failed to begin single-time command buffer.");
+
+            return commandBuffer;
+        }
+        catch
         {
-            SType = StructureType.CommandBufferBeginInfo,
-            Flags = CommandBufferUsageFlags.OneTimeSubmitBit
-        };
-
-        VulkanHelper.Check(_vk.BeginCommandBuffer(commandBuffer, in beginInfo),
-            "Failed to begin single-time command buffer.");
-
-        return commandBuffer;
+            System.Threading.Monitor.Exit(_utilityCommandLock);
+            throw;
+        }
     }
 
     /// <summary>
@@ -612,21 +625,32 @@ public sealed unsafe class VulkanContext : IDisposable
     /// </summary>
     public void EndSingleTimeCommands(CommandBuffer commandBuffer)
     {
-        VulkanHelper.Check(_vk.EndCommandBuffer(commandBuffer),
-            "Failed to end single-time command buffer.");
-
-        SubmitInfo submitInfo = new()
+        try
         {
-            SType = StructureType.SubmitInfo,
-            CommandBufferCount = 1,
-            PCommandBuffers = &commandBuffer
-        };
+            VulkanHelper.Check(_vk.EndCommandBuffer(commandBuffer),
+                "Failed to end single-time command buffer.");
 
-        VulkanHelper.Check(_vk.QueueSubmit(_graphicsQueue, 1, in submitInfo, default),
-            "Failed to submit single-time command buffer to graphics queue.");
+            SubmitInfo submitInfo = new()
+            {
+                SType = StructureType.SubmitInfo,
+                CommandBufferCount = 1,
+                PCommandBuffers = &commandBuffer
+            };
 
-        _vk.QueueWaitIdle(_graphicsQueue);
-        _vk.FreeCommandBuffers(_device, _utilityCommandPool, 1, in commandBuffer);
+            lock (GraphicsQueueLock)
+            {
+                VulkanHelper.Check(_vk.QueueSubmit(_graphicsQueue, 1, in submitInfo, default),
+                    "Failed to submit single-time command buffer to graphics queue.");
+
+                _vk.QueueWaitIdle(_graphicsQueue);
+            }
+
+            _vk.FreeCommandBuffers(_device, _utilityCommandPool, 1, in commandBuffer);
+        }
+        finally
+        {
+            System.Threading.Monitor.Exit(_utilityCommandLock);
+        }
     }
 
     /// <summary>
@@ -637,7 +661,10 @@ public sealed unsafe class VulkanContext : IDisposable
         if (_disposed)
             return;
 
-        _vk.DeviceWaitIdle(_device);
+        lock (GraphicsQueueLock)
+        {
+            _vk.DeviceWaitIdle(_device);
+        }
 
         if (_utilityCommandPool.Handle != 0)
         {
@@ -663,38 +690,3 @@ public sealed unsafe class VulkanContext : IDisposable
     }
 }
 
-/// <summary>
-/// Marshals a list of managed strings into a contiguous unmanaged UTF-8 array for Vulkan create info.
-/// </summary>
-internal sealed unsafe class MarshaledStringArray : IDisposable
-{
-    private readonly byte** _pointer;
-    private readonly int _length;
-
-    public byte** Pointer => _pointer;
-
-    /// <summary>
-    /// Allocates and converts managed strings into a null-terminated UTF-8 byte pointer array.
-    /// </summary>
-    public MarshaledStringArray(IReadOnlyList<string> strings)
-    {
-        _length = strings.Count;
-        _pointer = (byte**)Marshal.AllocHGlobal(sizeof(byte*) * _length);
-        for (int i = 0; i < _length; i++)
-        {
-            _pointer[i] = (byte*)SilkMarshal.StringToPtr(strings[i]);
-        }
-    }
-
-    /// <summary>
-    /// Frees all allocated UTF-8 string pointers and the outer pointer array.
-    /// </summary>
-    public void Dispose()
-    {
-        for (int i = 0; i < _length; i++)
-        {
-            SilkMarshal.Free((nint)_pointer[i]);
-        }
-        Marshal.FreeHGlobal((nint)_pointer);
-    }
-}

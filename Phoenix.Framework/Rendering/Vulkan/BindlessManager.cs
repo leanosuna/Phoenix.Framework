@@ -14,16 +14,19 @@ public sealed unsafe class BindlessManager : IDisposable
     private DescriptorPool _descriptorPool;
     private DescriptorSet _descriptorSet;
     private Sampler _defaultSampler;
-    private readonly Stack<uint> _freeSlots = new();
-    private uint _nextSlot = 1; // Slot 0 is reserved for default 1x1 white texture
+    private readonly SamplerManager _samplerManager;
+    private readonly List<FreeRange> _freeRanges = [];
+    private uint _nextSlot = 1; // Slot 0 is reserved for default checkerboard fallback texture
     private readonly object _lock = new();
-    private VulkanTexture? _defaultWhiteTexture;
+    private VulkanTexture? _defaultCheckerboardTexture;
     private bool _disposed;
 
     public DescriptorSetLayout DescriptorSetLayout => _descriptorSetLayout;
     public DescriptorSet DescriptorSet => _descriptorSet;
     public Sampler DefaultSampler => _defaultSampler;
-    public VulkanTexture? DefaultWhiteTexture => _defaultWhiteTexture;
+    public SamplerManager SamplerManager => _samplerManager;
+    public VulkanTexture? DefaultCheckerboardTexture => _defaultCheckerboardTexture;
+    public VulkanTexture? DefaultWhiteTexture => _defaultCheckerboardTexture;
 
     /// <summary>
     /// Initializes the bindless descriptor set layout, pool, set, default sampler, and slot 0 default texture.
@@ -31,6 +34,7 @@ public sealed unsafe class BindlessManager : IDisposable
     public BindlessManager(VulkanContext context)
     {
         _context = context;
+        _samplerManager = new SamplerManager(context);
 
         CreateDescriptorSetLayout();
         CreateDescriptorPoolAndSet();
@@ -141,12 +145,139 @@ public sealed unsafe class BindlessManager : IDisposable
     }
 
     /// <summary>
-    /// Allocates and writes a 1x1 pure white texture to reserved slot 0 for untextured geometry fallback.
+    /// Allocates and writes a 64x64 magenta/charcoal checkerboard texture to reserved slot 0 for untextured geometry fallback.
     /// </summary>
     private void InitializeDefaultTexture()
     {
-        ReadOnlySpan<byte> whitePixel = [255, 255, 255, 255];
-        _defaultWhiteTexture = new VulkanTexture(_context, this, 1, 1, whitePixel, Format.R8G8B8A8Unorm, isDefaultSlot0: true);
+        const int width = 64;
+        const int height = 64;
+        const int tileSize = 8;
+        byte[] pixels = new byte[width * height * 4];
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                bool isTileA = ((x / tileSize) + (y / tileSize)) % 2 == 0;
+                int idx = (y * width + x) * 4;
+                if (isTileA)
+                {
+                    pixels[idx + 0] = 255; // R
+                    pixels[idx + 1] = 0;   // G
+                    pixels[idx + 2] = 255; // B
+                    pixels[idx + 3] = 255; // A
+                }
+                else
+                {
+                    pixels[idx + 0] = 30;  // R
+                    pixels[idx + 1] = 30;  // G
+                    pixels[idx + 2] = 30;  // B
+                    pixels[idx + 3] = 255; // A
+                }
+            }
+        }
+
+        _defaultCheckerboardTexture = new VulkanTexture(_context, this, width, height, pixels, options: null, Format.R8G8B8A8Unorm, isDefaultSlot0: true);
+    }
+
+    /// <summary>
+    /// Allocates a contiguous block of descriptor slots to avoid fragmentation across models.
+    /// Each reserved slot is initially populated with the default checkerboard fallback texture.
+    /// </summary>
+    public uint AllocateSlots(uint count)
+    {
+        if (count == 0)
+            throw new ArgumentOutOfRangeException(nameof(count), "Must allocate at least 1 slot.");
+
+        lock (_lock)
+        {
+            uint allocatedStart;
+            int foundIdx = -1;
+
+            // Search for a suitable free range using best-fit strategy
+            for (int i = 0; i < _freeRanges.Count; i++)
+            {
+                if (_freeRanges[i].Count >= count)
+                {
+                    if (foundIdx == -1 || _freeRanges[i].Count < _freeRanges[foundIdx].Count)
+                    {
+                        foundIdx = i;
+                    }
+                }
+            }
+
+            if (foundIdx != -1)
+            {
+                var range = _freeRanges[foundIdx];
+                allocatedStart = range.Start;
+                if (range.Count == count)
+                {
+                    _freeRanges.RemoveAt(foundIdx);
+                }
+                else
+                {
+                    _freeRanges[foundIdx] = new FreeRange(range.Start + count, range.Count - count);
+                }
+            }
+            else
+            {
+                if (_nextSlot + count > MaxBindlessTextures)
+                    throw new InvalidOperationException($"Exceeded maximum bindless textures capacity ({MaxBindlessTextures}).");
+
+                allocatedStart = _nextSlot;
+                _nextSlot += count;
+            }
+
+            // Immediately populate all reserved slots with the default checkerboard texture
+            if (_defaultCheckerboardTexture != null)
+            {
+                for (uint i = 0; i < count; i++)
+                {
+                    UpdateDescriptor(allocatedStart + i, _defaultCheckerboardTexture.ImageView, _defaultSampler);
+                }
+            }
+
+            return allocatedStart;
+        }
+    }
+
+    /// <summary>
+    /// Releases a contiguous block of texture slots back to the free pool and merges adjacent ranges.
+    /// </summary>
+    public void FreeSlots(uint startSlot, uint count)
+    {
+        if (startSlot == 0 || count == 0)
+            return;
+
+        lock (_lock)
+        {
+            int insertIdx = 0;
+            while (insertIdx < _freeRanges.Count && _freeRanges[insertIdx].Start < startSlot)
+                insertIdx++;
+
+            _freeRanges.Insert(insertIdx, new FreeRange(startSlot, count));
+
+            // Coalesce adjacent ranges
+            for (int i = _freeRanges.Count - 1; i > 0; i--)
+            {
+                var prev = _freeRanges[i - 1];
+                var curr = _freeRanges[i];
+                if (prev.Start + prev.Count == curr.Start)
+                {
+                    _freeRanges[i - 1] = new FreeRange(prev.Start, prev.Count + curr.Count);
+                    _freeRanges.RemoveAt(i);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Registers an image view into the bindless descriptor set using a structural sampler description.
+    /// </summary>
+    public uint RegisterTexture(ImageView imageView, in SamplerDescription samplerDesc)
+    {
+        var sampler = _samplerManager.GetOrCreateSampler(samplerDesc);
+        return RegisterTexture(imageView, sampler);
     }
 
     /// <summary>
@@ -156,47 +287,39 @@ public sealed unsafe class BindlessManager : IDisposable
     {
         lock (_lock)
         {
-            uint slot;
-            if (_freeSlots.Count > 0)
-            {
-                slot = _freeSlots.Pop();
-            }
-            else
-            {
-                if (_nextSlot >= MaxBindlessTextures)
-                    throw new InvalidOperationException($"Exceeded maximum bindless textures capacity ({MaxBindlessTextures}).");
-                slot = _nextSlot++;
-            }
-
+            uint slot = AllocateSlots(1);
             UpdateDescriptor(slot, imageView, sampler ?? _defaultSampler);
             return slot;
         }
     }
 
     /// <summary>
-    /// Updates the descriptor set entry at the specified slot index.
+    /// Updates the descriptor set entry at the specified slot index in real time.
     /// </summary>
-    internal void UpdateDescriptor(uint slot, ImageView imageView, Sampler sampler)
+    public void UpdateDescriptor(uint slot, ImageView imageView, Sampler sampler)
     {
-        DescriptorImageInfo imageInfo = new()
+        lock (_lock)
         {
-            ImageLayout = ImageLayout.ShaderReadOnlyOptimal,
-            ImageView = imageView,
-            Sampler = sampler
-        };
+            DescriptorImageInfo imageInfo = new()
+            {
+                ImageLayout = ImageLayout.ShaderReadOnlyOptimal,
+                ImageView = imageView,
+                Sampler = sampler
+            };
 
-        WriteDescriptorSet write = new()
-        {
-            SType = StructureType.WriteDescriptorSet,
-            DstSet = _descriptorSet,
-            DstBinding = 0,
-            DstArrayElement = slot,
-            DescriptorCount = 1,
-            DescriptorType = DescriptorType.CombinedImageSampler,
-            PImageInfo = &imageInfo
-        };
+            WriteDescriptorSet write = new()
+            {
+                SType = StructureType.WriteDescriptorSet,
+                DstSet = _descriptorSet,
+                DstBinding = 0,
+                DstArrayElement = slot,
+                DescriptorCount = 1,
+                DescriptorType = DescriptorType.CombinedImageSampler,
+                PImageInfo = &imageInfo
+            };
 
-        _context.Vk.UpdateDescriptorSets(_context.Device, 1, in write, 0, null);
+            _context.Vk.UpdateDescriptorSets(_context.Device, 1, in write, 0, null);
+        }
     }
 
     /// <summary>
@@ -204,24 +327,20 @@ public sealed unsafe class BindlessManager : IDisposable
     /// </summary>
     public void UnregisterTexture(uint slot)
     {
-        if (slot == 0)
-            return;
-
-        lock (_lock)
-        {
-            _freeSlots.Push(slot);
-        }
+        FreeSlots(slot, 1);
     }
 
     /// <summary>
-    /// Releases the default texture, default sampler, descriptor pool, and descriptor set layout.
+    /// Releases the default texture, default sampler, descriptor pool, descriptor set layout, and cached samplers.
     /// </summary>
     public void Dispose()
     {
         if (_disposed)
             return;
 
-        _defaultWhiteTexture?.Dispose();
+        _defaultCheckerboardTexture?.Dispose();
+
+        _samplerManager.Dispose();
 
         if (_defaultSampler.Handle != 0)
         {

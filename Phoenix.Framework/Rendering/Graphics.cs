@@ -1,4 +1,6 @@
 
+using Phoenix.Framework.AssetImport;
+using Phoenix.Framework.AssetImport.Processing;
 using Phoenix.Framework.Rendering.Vulkan;
 using Silk.NET.Input;
 using Silk.NET.Maths;
@@ -56,6 +58,11 @@ public sealed class Graphics : IDisposable
     public DescriptorSetLayout BindlessLayout => BindlessManager.DescriptorSetLayout;
 
     /// <summary>
+    /// Gets the descriptor set layout for skeletal animation bone uniform buffers (Set 2).
+    /// </summary>
+    public DescriptorSetLayout BoneLayout { get; private set; }
+
+    /// <summary>
     /// Gets or sets the default background clear color for dynamic render passes.
     /// </summary>
     public Vector4 ClearColor { get; set; } = new(0.1f, 0.12f, 0.16f, 1.0f);
@@ -98,6 +105,7 @@ public sealed class Graphics : IDisposable
         Swapchain = new VulkanSwapchain(Context, game.Window);
         CommonUbo = new CommonUBOManager(Context);
         BindlessManager = new BindlessManager(Context);
+        BoneLayout = CreateBoneLayout();
         RenderContext = new RenderContext(Context, Swapchain, CommonUbo, BindlessManager);
         Viewport = new RenderViewport(game);
     }
@@ -113,15 +121,23 @@ public sealed class Graphics : IDisposable
     /// <summary>
     /// Creates and uploads a 2D texture from raw RGBA pixel data to the GPU and registers it into the bindless descriptor set.
     /// </summary>
-    public VulkanTexture CreateTexture(int width, int height, ReadOnlySpan<byte> rgbaPixels, Format format = Format.R8G8B8A8Unorm)
+    public VulkanTexture CreateTexture(int width, int height, ReadOnlySpan<byte> rgbaPixels, TextureLoadOptions? options = null, Format format = Format.R8G8B8A8Unorm, uint? preallocatedSlot = null)
     {
-        return new VulkanTexture(Context, BindlessManager, width, height, rgbaPixels, format);
+        return new VulkanTexture(Context, BindlessManager, width, height, rgbaPixels, options, format, isDefaultSlot0: false, preallocatedSlot);
+    }
+
+    /// <summary>
+    /// Creates and uploads a 2D texture from pre-compressed BCn mipmap data to the GPU.
+    /// </summary>
+    public VulkanTexture CreateTexture(CompressedTextureData data, TextureLoadOptions? options = null, uint? preallocatedSlot = null)
+    {
+        return new VulkanTexture(Context, BindlessManager, data, options, preallocatedSlot);
     }
 
     /// <summary>
     /// Creates a solid color 2D texture of the specified dimensions.
     /// </summary>
-    public VulkanTexture CreateTexture2D(int width, int height, Vector4 color)
+    public VulkanTexture CreateTexture2D(int width, int height, Vector4 color, TextureLoadOptions? options = null)
     {
         byte r = (byte)Math.Clamp((int)(color.X * 255.0f), 0, 255);
         byte g = (byte)Math.Clamp((int)(color.Y * 255.0f), 0, 255);
@@ -137,23 +153,23 @@ public sealed class Graphics : IDisposable
             pixels[i + 3] = a;
         }
 
-        return CreateTexture(width, height, pixels);
+        return CreateTexture(width, height, pixels, options);
     }
 
     /// <summary>
     /// Loads an image file from disk and uploads it as a bindless texture.
     /// </summary>
-    public VulkanTexture LoadTexture(string filePath, Format format = Format.R8G8B8A8Srgb)
+    public VulkanTexture LoadTexture(string filePath, TextureLoadOptions? options = null, Format format = Format.R8G8B8A8Srgb)
     {
-        return VulkanTexture.FromFile(Context, BindlessManager, filePath, format);
+        return VulkanTexture.FromFile(Context, BindlessManager, filePath, options, format);
     }
 
     /// <summary>
     /// Loads an image from a stream and uploads it as a bindless texture.
     /// </summary>
-    public VulkanTexture LoadTexture(Stream stream, Format format = Format.R8G8B8A8Srgb)
+    public VulkanTexture LoadTexture(Stream stream, TextureLoadOptions? options = null, Format format = Format.R8G8B8A8Srgb)
     {
-        return VulkanTexture.FromStream(Context, BindlessManager, stream, format);
+        return VulkanTexture.FromStream(Context, BindlessManager, stream, options, format);
     }
 
     /// <summary>
@@ -190,12 +206,114 @@ public sealed class Graphics : IDisposable
     }
 
     /// <summary>
-    /// Disposes bindless manager, uniform buffers, swapchain, and Vulkan device context.
+    /// Creates the descriptor set layout for skeletal animation bone uniform buffers (Set 2).
+    /// </summary>
+    private unsafe DescriptorSetLayout CreateBoneLayout()
+    {
+        DescriptorSetLayoutBinding binding = new()
+        {
+            Binding = 0,
+            DescriptorType = DescriptorType.UniformBuffer,
+            DescriptorCount = 1,
+            StageFlags = ShaderStageFlags.VertexBit
+        };
+
+        DescriptorSetLayoutCreateInfo layoutInfo = new()
+        {
+            SType = StructureType.DescriptorSetLayoutCreateInfo,
+            BindingCount = 1,
+            PBindings = &binding
+        };
+
+        VulkanHelper.Check(Context.Vk.CreateDescriptorSetLayout(Context.Device, in layoutInfo, null, out var layout),
+            "Failed to create bone descriptor set layout.");
+        return layout;
+    }
+
+    /// <summary>
+    /// Allocates a dedicated descriptor pool and descriptor set for a bone uniform buffer.
+    /// </summary>
+    public unsafe (DescriptorPool Pool, DescriptorSet Set) CreateBoneDescriptorSet(VulkanBuffer buffer)
+    {
+        DescriptorPoolSize poolSize = new()
+        {
+            Type = DescriptorType.UniformBuffer,
+            DescriptorCount = 1
+        };
+
+        DescriptorPoolCreateInfo poolInfo = new()
+        {
+            SType = StructureType.DescriptorPoolCreateInfo,
+            PoolSizeCount = 1,
+            PPoolSizes = &poolSize,
+            MaxSets = 1
+        };
+
+        VulkanHelper.Check(Context.Vk.CreateDescriptorPool(Context.Device, in poolInfo, null, out var pool),
+            "Failed to create bone descriptor pool.");
+
+        var layout = BoneLayout;
+        DescriptorSetAllocateInfo allocInfo = new()
+        {
+            SType = StructureType.DescriptorSetAllocateInfo,
+            DescriptorPool = pool,
+            DescriptorSetCount = 1,
+            PSetLayouts = &layout
+        };
+
+        VulkanHelper.Check(Context.Vk.AllocateDescriptorSets(Context.Device, in allocInfo, out var set),
+            "Failed to allocate bone descriptor set.");
+
+        DescriptorBufferInfo bufferInfo = new()
+        {
+            Buffer = buffer.Buffer,
+            Offset = 0,
+            Range = buffer.Size
+        };
+
+        WriteDescriptorSet write = new()
+        {
+            SType = StructureType.WriteDescriptorSet,
+            DstSet = set,
+            DstBinding = 0,
+            DstArrayElement = 0,
+            DescriptorType = DescriptorType.UniformBuffer,
+            DescriptorCount = 1,
+            PBufferInfo = &bufferInfo
+        };
+
+        Context.Vk.UpdateDescriptorSets(Context.Device, 1, in write, 0, null);
+
+        return (pool, set);
+    }
+
+    /// <summary>
+    /// Waits for all submitted GPU commands across all queues to finish execution.
+    /// </summary>
+    public void WaitIdle()
+    {
+        lock (Context.GraphicsQueueLock)
+        {
+            Context.Vk.DeviceWaitIdle(Context.Device);
+        }
+    }
+
+    /// <summary>
+    /// Disposes bindless manager, bone layout, uniform buffers, swapchain, and Vulkan device context.
     /// </summary>
     public void Dispose()
     {
         if (_disposed)
             return;
+
+        if (BoneLayout.Handle != 0)
+        {
+            unsafe
+            {
+                Context.Vk.DestroyDescriptorSetLayout(Context.Device, BoneLayout, null);
+            }
+            BoneLayout = default;
+        }
 
         BindlessManager.Dispose();
         CommonUbo.Dispose();

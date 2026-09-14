@@ -199,6 +199,25 @@ public sealed unsafe class RenderContext
     }
 
     /// <summary>
+    /// Binds a single descriptor set to a specific set index for the current pipeline layout.
+    /// </summary>
+    public void BindDescriptorSet(VulkanPipeline pipeline, uint setIndex, DescriptorSet descriptorSet)
+    {
+        _context.Vk.CmdBindDescriptorSets(_commandBuffer, pipeline.BindPoint, pipeline.Layout, setIndex, 1, in descriptorSet, 0, null);
+    }
+
+    /// <summary>
+    /// Binds multiple descriptor sets starting from the specified set index.
+    /// </summary>
+    public void BindDescriptorSets(VulkanPipeline pipeline, uint firstSet, ReadOnlySpan<DescriptorSet> descriptorSets)
+    {
+        fixed (DescriptorSet* pSets = descriptorSets)
+        {
+            _context.Vk.CmdBindDescriptorSets(_commandBuffer, pipeline.BindPoint, pipeline.Layout, firstSet, (uint)descriptorSets.Length, pSets, 0, null);
+        }
+    }
+
+    /// <summary>
     /// Uploads push constants data directly to the command buffer.
     /// </summary>
     public void PushConstants<T>(VulkanPipeline pipeline, in T data) where T : unmanaged
@@ -268,23 +287,3 @@ public sealed unsafe class RenderContext
     }
 }
 
-public readonly ref struct ScopedPass
-{
-    private readonly RenderContext _context;
-
-    /// <summary>
-    /// Initializes a scoped rendering pass wrapper.
-    /// </summary>
-    internal ScopedPass(RenderContext context)
-    {
-        _context = context;
-    }
-
-    /// <summary>
-    /// Ends the dynamic rendering pass upon scope exit.
-    /// </summary>
-    public void Dispose()
-    {
-        _context.EndPass();
-    }
-}

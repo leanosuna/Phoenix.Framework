@@ -89,6 +89,11 @@ Per-system skills (authoritative copies in `skills/`, also installed to `~/.clau
 
 Each skill is a compact pointer (key types + website links) — load the relevant one rather than pulling API details into context.
 
+## Coding standards
+
+- **One type per file:** Every class, struct, enum, interface, and record must have its own `.cs` file matching its type name exactly. Never bundle multiple type declarations in one file, even for small enums or helper structs.
+- **Directory and namespace structure:** Subdirectories mirror namespaces. Place internal processing models, data contracts, and native interop structs into dedicated subfolders (`Processing/`, `Native/`, etc.) with matching namespaces.
+
 ## Notes
 
 - `Input` is the class name — never write `InputManager`.

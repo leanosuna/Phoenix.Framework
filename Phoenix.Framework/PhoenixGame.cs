@@ -1,4 +1,5 @@
 using Phoenix;
+using Phoenix.Framework.AssetImport;
 using Phoenix.Framework.Cameras;
 using Phoenix.Framework.Inputs;
 using Phoenix.Framework.Maths;
@@ -219,6 +220,7 @@ public abstract class PhoenixGame : IDisposable
 
         InternalFramebufferResize(Window.FramebufferSize);
 
+        AssetLoader.Initialize(Graphics);
         SoundManager.Initialize();
         Initialize();
 
@@ -298,10 +300,12 @@ public abstract class PhoenixGame : IDisposable
     /// </summary>
     private void InternalOnClose()
     {
+        Graphics?.WaitIdle();
+        AssetLoader.UnloadAll();
         SoundManager.Shutdown();
         OnClose();
 
-        Graphics.Dispose();
+        Graphics?.Dispose();
     }
 
 
