@@ -1,16 +1,19 @@
-#version 410 core
-layout (location = 0) in vec3 vPos;
-uniform mat4 uWorld;
+#version 450 core
 
-layout(std140) uniform CommonData
-{
-    mat4 sView;
-    mat4 sProjection;
-    float sTime;
-    float sDeltaTime;
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec4 aColor;
+
+layout(set = 0, binding = 0) uniform CommonData {
+    mat4 uView;
+    mat4 uProjection;
+    vec3 uCamPos;
+    float uTime;
+    float uDeltaTime;
 };
 
-void main()
-{
-    gl_Position = sProjection * sView * uWorld * vec4(vPos, 1.0);
+layout(location = 0) out vec4 vColor;
+
+void main() {
+    vColor = aColor;
+    gl_Position = uProjection * uView * vec4(aPos, 1.0);
 }

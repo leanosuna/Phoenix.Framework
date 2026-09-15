@@ -1,5 +1,6 @@
 using Phoenix;
 using Phoenix.Framework.AssetImport.Processing;
+using Phoenix.Framework.AssetImport.Tracking;
 using Phoenix.Framework.Rendering;
 using Phoenix.Framework.Rendering.Geometry.Model;
 using Phoenix.Framework.Rendering.Shaders;
@@ -133,7 +134,7 @@ public static class AssetLoader
     /// Loads a 2D image file asynchronously on a background thread pool worker, compresses via CPU SIMD,
     /// caches to disk in PTEX v2 format, and uploads to the GPU.
     /// </summary>
-    public static async Task<VulkanTexture> LoadTextureAsync(string path, TextureLoadOptions? options = null, uint? preallocatedSlot = null)
+    public static async Task<VulkanTexture> LoadTextureAsync(string path, TextureLoadOptions? options = null, uint? preallocatedSlot = null, AssetLoadOperation? operation = null)
     {
         EnsureInitialized();
 
@@ -141,125 +142,144 @@ public static class AssetLoader
         if (!File.Exists(resolved))
             throw new FileNotFoundException($"Texture file not found: {resolved}");
 
-        var (resolvedOptions, sourceFile) = AssetOptions.ResolveTextureOptions(resolved, options);
-        string cacheKey = ComputeTextureCacheKey(resolved, resolvedOptions, sourceFile);
+        var op = operation ?? AssetLoadingTracker.BeginOperation(resolved, AssetLoadOperationType.Texture, "Resolving options...");
 
-        lock (_loadedTextures)
+        try
         {
-            if (_loadedTextures.TryGetValue(cacheKey, out var cached))
-            {
-                if (preallocatedSlot.HasValue)
-                {
-                    _graphics!.BindlessManager.UpdateDescriptor(preallocatedSlot.Value, cached.ImageView, cached.Sampler);
-                }
-                return cached;
-            }
-        }
+            var (resolvedOptions, sourceFile) = AssetOptions.ResolveTextureOptions(resolved, options);
+            string cacheKey = ComputeTextureCacheKey(resolved, resolvedOptions, sourceFile);
 
-        string sanitizedName = Path.GetFileNameWithoutExtension(resolved);
-        string pathHash = ComputeTexturePathHash(resolved);
-        string cacheFile = Path.Combine(_cacheRoot, "textures", $"{sanitizedName}_{pathHash}.bin");
-
-        CompressedTextureData texData = await Task.Run(() =>
-        {
-            if (File.Exists(cacheFile))
+            lock (_loadedTextures)
             {
-                try
+                if (_loadedTextures.TryGetValue(cacheKey, out var cached))
                 {
-                    using var fs = File.OpenRead(cacheFile);
-                    using var br = new BinaryReader(fs);
-                    uint magic = br.ReadUInt32();
-                    if (magic == 0x58455450) // "PTEX"
+                    if (preallocatedSlot.HasValue)
                     {
-                        uint ver = br.ReadUInt32();
-                        if (ver == 2)
+                        _graphics!.BindlessManager.UpdateDescriptor(preallocatedSlot.Value, cached.ImageView, cached.Sampler);
+                    }
+                    op.Complete($"Loaded {cached.Format} (Memory cache)");
+                    return cached;
+                }
+            }
+
+            string sanitizedName = Path.GetFileNameWithoutExtension(resolved);
+            string pathHash = ComputeTexturePathHash(resolved);
+            string cacheFile = Path.Combine(_cacheRoot, "textures", $"{sanitizedName}_{pathHash}.bin");
+
+            op.UpdateStatus("Checking cache...", 0.1f);
+
+            CompressedTextureData texData = await Task.Run(() =>
+            {
+                if (File.Exists(cacheFile))
+                {
+                    try
+                    {
+                        using var fs = File.OpenRead(cacheFile);
+                        using var br = new BinaryReader(fs);
+                        uint magic = br.ReadUInt32();
+                        if (magic == 0x58455450) // "PTEX"
                         {
-                            int width = br.ReadInt32();
-                            int height = br.ReadInt32();
-                            var format = (TextureCompressionFormat)br.ReadInt32();
-                            bool isSRgb = br.ReadBoolean();
-                            int mipCount = br.ReadInt32();
-
-                            bool formatMatches = format == resolvedOptions.Compression && isSRgb == resolvedOptions.IsSRgb;
-                            bool notStale = File.GetLastWriteTimeUtc(cacheFile) >= File.GetLastWriteTimeUtc(resolved);
-                            bool mipsMatch = !resolvedOptions.GenerateMipmaps || mipCount > 1 || (width == 1 && height == 1);
-
-                            if (!formatMatches)
+                            uint ver = br.ReadUInt32();
+                            if (ver == 2)
                             {
-                                Log.Info($"[AssetLoader] Texture '{Path.GetFileName(resolved)}' compression format mismatch (cached: {format}, desired: {resolvedOptions.Compression}, sRGB: {isSRgb} vs {resolvedOptions.IsSRgb}). Re-encoding...");
-                            }
-                            else if (notStale && mipsMatch)
-                            {
-                                List<CompressedMipLevel> mips = new(mipCount);
-                                for (int i = 0; i < mipCount; i++)
+                                int width = br.ReadInt32();
+                                int height = br.ReadInt32();
+                                var format = (TextureCompressionFormat)br.ReadInt32();
+                                bool isSRgb = br.ReadBoolean();
+                                int mipCount = br.ReadInt32();
+
+                                bool formatMatches = format == resolvedOptions.Compression && isSRgb == resolvedOptions.IsSRgb;
+                                bool notStale = File.GetLastWriteTimeUtc(cacheFile) >= File.GetLastWriteTimeUtc(resolved);
+                                bool mipsMatch = !resolvedOptions.GenerateMipmaps || mipCount > 1 || (width == 1 && height == 1);
+
+                                if (!formatMatches)
                                 {
-                                    int mW = br.ReadInt32();
-                                    int mH = br.ReadInt32();
-                                    int len = br.ReadInt32();
-                                    byte[] data = br.ReadBytes(len);
-                                    mips.Add(new CompressedMipLevel(mW, mH, data));
+                                    op.UpdateStatus($"Format mismatch (cached: {format}, desired: {resolvedOptions.Compression}). Re-encoding...", 0.2f);
+                                    Log.Info($"[AssetLoader] Texture '{Path.GetFileName(resolved)}' compression format mismatch (cached: {format}, desired: {resolvedOptions.Compression}, sRGB: {isSRgb} vs {resolvedOptions.IsSRgb}). Re-encoding...");
                                 }
-                                return new CompressedTextureData(width, height, format, isSRgb, mips);
+                                else if (notStale && mipsMatch)
+                                {
+                                    op.UpdateStatus($"Reading cached {format}...", 0.5f);
+                                    List<CompressedMipLevel> mips = new(mipCount);
+                                    for (int i = 0; i < mipCount; i++)
+                                    {
+                                        int mW = br.ReadInt32();
+                                        int mH = br.ReadInt32();
+                                        int len = br.ReadInt32();
+                                        byte[] data = br.ReadBytes(len);
+                                        mips.Add(new CompressedMipLevel(mW, mH, data));
+                                    }
+                                    return new CompressedTextureData(width, height, format, isSRgb, mips);
+                                }
                             }
                         }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warn($"[AssetLoader] Failed to read texture cache file '{cacheFile}': {ex.Message}. Re-encoding...");
+                    }
+                }
+
+                op.UpdateStatus($"Encoding ({resolvedOptions.Compression})...", 0.35f);
+                using var image = Image.Load<Rgba32>(resolved);
+                int w = image.Width;
+                int h = image.Height;
+                byte[] pixels = new byte[w * h * 4];
+                image.CopyPixelDataTo(pixels);
+
+                var compressed = CpuTextureCompressor.Compress(
+                    pixels, w, h, resolvedOptions.Compression, resolvedOptions.GenerateMipmaps, resolvedOptions.IsSRgb);
+
+                try
+                {
+                    string? dir = Path.GetDirectoryName(cacheFile);
+                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                        Directory.CreateDirectory(dir);
+
+                    using var fs = File.Create(cacheFile);
+                    using var bw = new BinaryWriter(fs);
+                    bw.Write((uint)0x58455450); // "PTEX"
+                    bw.Write((uint)2);          // version 2
+                    bw.Write(compressed.Width);
+                    bw.Write(compressed.Height);
+                    bw.Write((int)compressed.Format);
+                    bw.Write(compressed.IsSRgb);
+                    bw.Write(compressed.Mips.Count);
+                    for (int i = 0; i < compressed.Mips.Count; i++)
+                    {
+                        bw.Write(compressed.Mips[i].Width);
+                        bw.Write(compressed.Mips[i].Height);
+                        bw.Write(compressed.Mips[i].Data.Length);
+                        bw.Write(compressed.Mips[i].Data);
                     }
                 }
                 catch (Exception ex)
                 {
-                    Log.Warn($"[AssetLoader] Failed to read texture cache file '{cacheFile}': {ex.Message}. Re-encoding...");
+                    Log.Warn($"[AssetLoader] Failed to write texture cache file '{cacheFile}': {ex.Message}");
                 }
-            }
 
-            using var image = Image.Load<Rgba32>(resolved);
-            int w = image.Width;
-            int h = image.Height;
-            byte[] pixels = new byte[w * h * 4];
-            image.CopyPixelDataTo(pixels);
+                return compressed;
+            });
 
-            var compressed = CpuTextureCompressor.Compress(
-                pixels, w, h, resolvedOptions.Compression, resolvedOptions.GenerateMipmaps, resolvedOptions.IsSRgb);
+            op.UpdateStatus("Uploading to GPU...", 0.85f);
+            var texture = texData.Format != TextureCompressionFormat.None
+                ? _graphics!.CreateTexture(texData, resolvedOptions, preallocatedSlot)
+                : _graphics!.CreateTexture(texData.Width, texData.Height, texData.Mips[0].Data, resolvedOptions, preallocatedSlot: preallocatedSlot);
 
-            try
+            lock (_loadedTextures)
             {
-                string? dir = Path.GetDirectoryName(cacheFile);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
-
-                using var fs = File.Create(cacheFile);
-                using var bw = new BinaryWriter(fs);
-                bw.Write((uint)0x58455450); // "PTEX"
-                bw.Write((uint)2);          // version 2
-                bw.Write(compressed.Width);
-                bw.Write(compressed.Height);
-                bw.Write((int)compressed.Format);
-                bw.Write(compressed.IsSRgb);
-                bw.Write(compressed.Mips.Count);
-                for (int i = 0; i < compressed.Mips.Count; i++)
-                {
-                    bw.Write(compressed.Mips[i].Width);
-                    bw.Write(compressed.Mips[i].Height);
-                    bw.Write(compressed.Mips[i].Data.Length);
-                    bw.Write(compressed.Mips[i].Data);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warn($"[AssetLoader] Failed to write texture cache file '{cacheFile}': {ex.Message}");
+                _loadedTextures[cacheKey] = texture;
             }
 
-            return compressed;
-        });
-
-        var texture = texData.Format != TextureCompressionFormat.None
-            ? _graphics!.CreateTexture(texData, resolvedOptions, preallocatedSlot)
-            : _graphics!.CreateTexture(texData.Width, texData.Height, texData.Mips[0].Data, resolvedOptions, preallocatedSlot: preallocatedSlot);
-
-        lock (_loadedTextures)
-        {
-            _loadedTextures[cacheKey] = texture;
+            string slotInfo = preallocatedSlot.HasValue ? $" (Slot {preallocatedSlot.Value})" : "";
+            op.Complete($"Uploaded {texture.Format}{slotInfo}");
+            return texture;
         }
-
-        return texture;
+        catch (Exception ex)
+        {
+            op.Fail(ex.Message);
+            throw;
+        }
     }
 
     /// <summary>
@@ -289,15 +309,27 @@ public static class AssetLoader
             File.GetLastWriteTimeUtc(cacheFile) >= File.GetLastWriteTimeUtc(resolved) &&
             (sourceFile == null || File.GetLastWriteTimeUtc(cacheFile) >= File.GetLastWriteTimeUtc(sourceFile));
 
+        var modelTask = AssetLoadingTracker.BeginOperation(resolved, AssetLoadOperationType.Model, canUseCache ? "Loading from binary cache..." : "Importing FBX/GLTF via Assimp...");
+
         Model model;
         List<EmbeddedTexturePayload>? payloads = null;
-        if (canUseCache)
+        try
         {
-            model = BinaryModelReader.Read(_graphics!, cacheFile);
+            if (canUseCache)
+            {
+                model = BinaryModelReader.Read(_graphics!, cacheFile);
+                modelTask.Complete("Loaded from cache");
+            }
+            else
+            {
+                (model, payloads) = AssimpImporter.ImportAndCache(_graphics!, resolved, cacheFile, resolvedOptions, modelTask);
+                modelTask.Complete("Model imported and cached");
+            }
         }
-        else
+        catch (Exception ex)
         {
-            (model, payloads) = AssimpImporter.ImportAndCache(_graphics!, resolved, cacheFile, resolvedOptions);
+            modelTask.Fail(ex.Message);
+            throw;
         }
 
         model.BindlessManager = _graphics!.BindlessManager;
@@ -342,33 +374,45 @@ public static class AssetLoader
             File.GetLastWriteTimeUtc(cacheFile) >= File.GetLastWriteTimeUtc(resolved) &&
             (sourceFile == null || File.GetLastWriteTimeUtc(cacheFile) >= File.GetLastWriteTimeUtc(sourceFile));
 
-        var (model, payloads) = await Task.Run(() =>
+        var modelTask = AssetLoadingTracker.BeginOperation(resolved, AssetLoadOperationType.Model, canUseCache ? "Loading from binary cache..." : "Importing FBX/GLTF via Assimp...");
+
+        try
         {
-            if (canUseCache)
+            var (model, payloads) = await Task.Run(() =>
             {
-                var m = BinaryModelReader.Read(_graphics!, cacheFile);
-                return (m, (List<EmbeddedTexturePayload>?)null);
-            }
-            else
+                if (canUseCache)
+                {
+                    var m = BinaryModelReader.Read(_graphics!, cacheFile);
+                    return (m, (List<EmbeddedTexturePayload>?)null);
+                }
+                else
+                {
+                    var res = AssimpImporter.ImportAndCache(_graphics!, resolved, cacheFile, resolvedOptions, modelTask);
+                    return (res.Model, (List<EmbeddedTexturePayload>?)res.EmbeddedTextures);
+                }
+            });
+
+            modelTask.Complete(canUseCache ? "Loaded from cache" : "Model imported and cached");
+
+            model.BindlessManager = _graphics!.BindlessManager;
+
+            if (model.TextureNames.Count > 0)
             {
-                var res = AssimpImporter.ImportAndCache(_graphics!, resolved, cacheFile, resolvedOptions);
-                return (res.Model, (List<EmbeddedTexturePayload>?)res.EmbeddedTextures);
+                StartModelTextureStreaming(model, resolved, resolvedOptions, payloads);
             }
-        });
 
-        model.BindlessManager = _graphics!.BindlessManager;
+            lock (_loadedModels)
+            {
+                _loadedModels[cacheKey] = model;
+            }
 
-        if (model.TextureNames.Count > 0)
-        {
-            StartModelTextureStreaming(model, resolved, resolvedOptions, payloads);
+            return model;
         }
-
-        lock (_loadedModels)
+        catch (Exception ex)
         {
-            _loadedModels[cacheKey] = model;
+            modelTask.Fail(ex.Message);
+            throw;
         }
-
-        return model;
     }
 
     /// <summary>
@@ -574,6 +618,8 @@ public static class AssetLoader
 
             Log.Info($"[AssetLoader] Streaming texture [{textureIndex}] '{Path.GetFileName(resolvedTexPath)}' to slot {targetSlot} (Format: {texOptions.Compression})...");
 
+            var texTask = AssetLoadingTracker.BeginOperation(resolvedTexPath, AssetLoadOperationType.Texture, $"Queued for slot {targetSlot}");
+
             _ = Task.Run(async () =>
             {
                 try
@@ -582,6 +628,7 @@ public static class AssetLoader
                     {
                         try
                         {
+                            texTask.UpdateStatus("Extracting embedded payload...", 0.1f);
                             string? dir = Path.GetDirectoryName(resolvedTexPath);
                             if (!string.IsNullOrEmpty(dir))
                                 Directory.CreateDirectory(dir);
@@ -602,12 +649,13 @@ public static class AssetLoader
                         }
                     }
 
-                    var texture = await LoadTextureAsync(resolvedTexPath, preallocatedSlot: targetSlot);
+                    var texture = await LoadTextureAsync(resolvedTexPath, preallocatedSlot: targetSlot, operation: texTask);
                     Log.Info($"[AssetLoader] Texture [{textureIndex}] successfully uploaded to slot {targetSlot} ({texture.Width}x{texture.Height}, Format: {texture.Format})");
                     model.NotifyTextureLoaded(textureIndex, texture);
                 }
                 catch (Exception ex)
                 {
+                    texTask.Fail(ex.Message);
                     Log.Error($"[AssetLoader] Failed to stream model texture '{texName}': {ex.Message}");
                     model.NotifyTextureLoaded(textureIndex, null!);
                 }

@@ -35,7 +35,7 @@ public static class CpuTextureCompressor
             {
                 Format = bcFormat,
                 GenerateMipMaps = generateMipmaps,
-                Quality = CompressionQuality.Balanced
+                Quality = CompressionQuality.Fast
             }
         };
 

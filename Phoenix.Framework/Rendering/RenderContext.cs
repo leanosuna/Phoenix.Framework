@@ -16,6 +16,7 @@ public sealed unsafe class RenderContext
     private bool _passActive;
 
     public bool HasRenderedPass { get; private set; }
+    public bool IsPassActive => _passActive;
     public CommandBuffer CommandBuffer => _commandBuffer;
     public uint ImageIndex => _imageIndex;
     public int CurrentFrame => _currentFrame;
@@ -111,6 +112,162 @@ public sealed unsafe class RenderContext
             LoadOp = AttachmentLoadOp.Clear,
             StoreOp = AttachmentStoreOp.DontCare,
             ClearValue = new ClearValue { DepthStencil = depthValue }
+        };
+
+        RenderingInfo renderingInfo = new()
+        {
+            SType = StructureType.RenderingInfo,
+            RenderArea = new Rect2D(new Offset2D(0, 0), _swapchain.Extent),
+            LayerCount = 1,
+            ColorAttachmentCount = 1,
+            PColorAttachments = &colorAttachment,
+            PDepthAttachment = &depthAttachment
+        };
+
+        vk.CmdBeginRendering(_commandBuffer, in renderingInfo);
+
+        Viewport viewport = new(0, _swapchain.Extent.Height, _swapchain.Extent.Width, -(float)_swapchain.Extent.Height, 0.0f, 1.0f);
+        vk.CmdSetViewport(_commandBuffer, 0, 1, in viewport);
+
+        Rect2D scissor = new(new Offset2D(0, 0), _swapchain.Extent);
+        vk.CmdSetScissor(_commandBuffer, 0, 1, in scissor);
+
+        _passActive = true;
+        HasRenderedPass = true;
+
+        return new ScopedPass(this);
+    }
+
+    /// <summary>
+    /// Begins a scoped dynamic rendering overlay pass preserving existing color attachment contents and disabling depth testing.
+    /// </summary>
+    public ScopedPass BeginUIPass()
+    {
+        if (_passActive)
+            throw new InvalidOperationException("A render pass is already active on this context.");
+
+        var vk = _context.Vk;
+        var colorImage = _swapchain.GetImage(_imageIndex);
+
+        ImageMemoryBarrier2 colorBarrier = new()
+        {
+            SType = StructureType.ImageMemoryBarrier2,
+            SrcStageMask = PipelineStageFlags2.ColorAttachmentOutputBit,
+            SrcAccessMask = AccessFlags2.ColorAttachmentWriteBit,
+            DstStageMask = PipelineStageFlags2.ColorAttachmentOutputBit,
+            DstAccessMask = AccessFlags2.ColorAttachmentWriteBit | AccessFlags2.ColorAttachmentReadBit,
+            OldLayout = ImageLayout.PresentSrcKhr,
+            NewLayout = ImageLayout.ColorAttachmentOptimal,
+            Image = colorImage,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1)
+        };
+
+        DependencyInfo depInfo = new()
+        {
+            SType = StructureType.DependencyInfo,
+            ImageMemoryBarrierCount = 1,
+            PImageMemoryBarriers = &colorBarrier
+        };
+
+        vk.CmdPipelineBarrier2(_commandBuffer, in depInfo);
+
+        RenderingAttachmentInfo colorAttachment = new()
+        {
+            SType = StructureType.RenderingAttachmentInfo,
+            ImageView = _swapchain.GetImageView(_imageIndex),
+            ImageLayout = ImageLayout.ColorAttachmentOptimal,
+            LoadOp = AttachmentLoadOp.Load,
+            StoreOp = AttachmentStoreOp.Store
+        };
+
+        RenderingInfo renderingInfo = new()
+        {
+            SType = StructureType.RenderingInfo,
+            RenderArea = new Rect2D(new Offset2D(0, 0), _swapchain.Extent),
+            LayerCount = 1,
+            ColorAttachmentCount = 1,
+            PColorAttachments = &colorAttachment,
+            PDepthAttachment = null
+        };
+
+        vk.CmdBeginRendering(_commandBuffer, in renderingInfo);
+
+        Viewport viewport = new(0, 0, _swapchain.Extent.Width, _swapchain.Extent.Height, 0.0f, 1.0f);
+        vk.CmdSetViewport(_commandBuffer, 0, 1, in viewport);
+
+        Rect2D scissor = new(new Offset2D(0, 0), _swapchain.Extent);
+        vk.CmdSetScissor(_commandBuffer, 0, 1, in scissor);
+
+        _passActive = true;
+        HasRenderedPass = true;
+
+        return new ScopedPass(this);
+    }
+
+    /// <summary>
+    /// Begins a scoped dynamic rendering overlay pass retaining both color and depth attachments for gizmo wireframe rendering.
+    /// </summary>
+    public ScopedPass BeginGizmoPass()
+    {
+        if (_passActive)
+            throw new InvalidOperationException("A render pass is already active on this context.");
+
+        var vk = _context.Vk;
+        var colorImage = _swapchain.GetImage(_imageIndex);
+        var depthImage = _swapchain.DepthImage;
+
+        ImageMemoryBarrier2 colorBarrier = new()
+        {
+            SType = StructureType.ImageMemoryBarrier2,
+            SrcStageMask = PipelineStageFlags2.ColorAttachmentOutputBit,
+            SrcAccessMask = AccessFlags2.ColorAttachmentWriteBit,
+            DstStageMask = PipelineStageFlags2.ColorAttachmentOutputBit,
+            DstAccessMask = AccessFlags2.ColorAttachmentWriteBit | AccessFlags2.ColorAttachmentReadBit,
+            OldLayout = ImageLayout.PresentSrcKhr,
+            NewLayout = ImageLayout.ColorAttachmentOptimal,
+            Image = colorImage,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1)
+        };
+
+        ImageMemoryBarrier2 depthBarrier = new()
+        {
+            SType = StructureType.ImageMemoryBarrier2,
+            SrcStageMask = PipelineStageFlags2.EarlyFragmentTestsBit | PipelineStageFlags2.LateFragmentTestsBit,
+            SrcAccessMask = AccessFlags2.DepthStencilAttachmentWriteBit,
+            DstStageMask = PipelineStageFlags2.EarlyFragmentTestsBit | PipelineStageFlags2.LateFragmentTestsBit,
+            DstAccessMask = AccessFlags2.DepthStencilAttachmentReadBit,
+            OldLayout = ImageLayout.DepthAttachmentOptimal,
+            NewLayout = ImageLayout.DepthAttachmentOptimal,
+            Image = depthImage,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.DepthBit, 0, 1, 0, 1)
+        };
+
+        ImageMemoryBarrier2* barriers = stackalloc ImageMemoryBarrier2[] { colorBarrier, depthBarrier };
+        DependencyInfo depInfo = new()
+        {
+            SType = StructureType.DependencyInfo,
+            ImageMemoryBarrierCount = 2,
+            PImageMemoryBarriers = barriers
+        };
+
+        vk.CmdPipelineBarrier2(_commandBuffer, in depInfo);
+
+        RenderingAttachmentInfo colorAttachment = new()
+        {
+            SType = StructureType.RenderingAttachmentInfo,
+            ImageView = _swapchain.GetImageView(_imageIndex),
+            ImageLayout = ImageLayout.ColorAttachmentOptimal,
+            LoadOp = AttachmentLoadOp.Load,
+            StoreOp = AttachmentStoreOp.Store
+        };
+
+        RenderingAttachmentInfo depthAttachment = new()
+        {
+            SType = StructureType.RenderingAttachmentInfo,
+            ImageView = _swapchain.DepthImageView,
+            ImageLayout = ImageLayout.DepthAttachmentOptimal,
+            LoadOp = AttachmentLoadOp.Load,
+            StoreOp = AttachmentStoreOp.Store
         };
 
         RenderingInfo renderingInfo = new()

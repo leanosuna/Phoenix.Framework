@@ -4,6 +4,9 @@ using Phoenix.Framework.Cameras;
 using Phoenix.Framework.Inputs;
 using Phoenix.Framework.Maths;
 using Phoenix.Framework.Rendering;
+using Phoenix.Framework.Rendering.Gizmos;
+using Phoenix.Framework.Rendering.GUI;
+using Phoenix.Framework.Rendering.Primitives;
 using Phoenix.Framework.Rendering.Vulkan;
 using Phoenix.Framework.Rendering.Windowing;
 using Phoenix.Framework.Sound;
@@ -44,6 +47,8 @@ public abstract class PhoenixGame : IDisposable
     public Input Input { get; private set; } = default!;
     public Camera? Camera { get; set; }
     public Metrics Metrics { get; } = new Metrics();
+    public UI UI { get; private set; } = default!;
+    public Gizmos Gizmos { get; private set; } = default!;
 
     /// <summary>
     /// Gets the graphics engine managing Vulkan devices, swapchain, uniform buffers, and pipelines.
@@ -222,6 +227,9 @@ public abstract class PhoenixGame : IDisposable
 
         AssetLoader.Initialize(Graphics);
         SoundManager.Initialize();
+        Primitive.Initialize(Graphics);
+        Gizmos = new Gizmos(this);
+        UI = new UI(this);
         Initialize();
 
         if (Graphics.Swapchain.IsVSyncEnabled != Window.VSync)
@@ -237,6 +245,11 @@ public abstract class PhoenixGame : IDisposable
     {
         Metrics.ProcessUpdate(deltaTime);
         Input.Update();
+
+        if (Gizmos.Enabled)
+            Gizmos.Update();
+
+        UI.Update(deltaTime);
 
         if (Input.KeyDownOnce(Graphics.RenderHaltKey))
         {
@@ -278,7 +291,11 @@ public abstract class PhoenixGame : IDisposable
         if (!Graphics.RenderContext.HasRenderedPass)
             Graphics.RenderContext.FallbackClearPass(Graphics.ClearColor);
 
+        if (Gizmos.Enabled && Gizmos.HasCommands)
+            Gizmos.Render(Graphics.RenderContext);
+
         RenderUI();
+        UI.Render(Graphics.RenderContext);
 
         Graphics.Swapchain.SubmitAndPresent(cmd, imageIndex);
     }
@@ -301,6 +318,8 @@ public abstract class PhoenixGame : IDisposable
     private void InternalOnClose()
     {
         Graphics?.WaitIdle();
+        Gizmos?.Dispose();
+        UI?.Dispose();
         AssetLoader.UnloadAll();
         SoundManager.Shutdown();
         OnClose();

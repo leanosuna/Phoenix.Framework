@@ -1,20 +1,8 @@
-#version 410 core
+#version 450 core
 
-out vec4 FragColor;
+layout(location = 0) in vec4 vColor;
+layout(location = 0) out vec4 fColor;
 
-uniform vec3 uColor;
-uniform bool uHit;
-
-void main()
-{
-    vec3 col = uColor;
-    if(uHit)
-    {
-        if(col == vec3(1, 0, 0))
-            col = vec3(1, 1, 0);
-        else
-            col = vec3(1, 0, 0);
-    }
-    FragColor = vec4(col, 1.0);
-
+void main() {
+    fColor = vColor;
 }

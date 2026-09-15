@@ -10,6 +10,7 @@ using AssimpScene = Silk.NET.Assimp.Scene;
 using ModelAnimation = Phoenix.Framework.Rendering.Geometry.Model.Animations.Animation;
 using File = System.IO.File;
 using Phoenix.Framework.AssetImport.Processing;
+using Phoenix.Framework.AssetImport.Tracking;
 using Phoenix;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
@@ -48,8 +49,10 @@ public static unsafe class AssimpImporter
     /// Imports a model from source path, processes geometry and animations, writes a .bin cache, and loads GPU buffers.
     /// Returns the created model along with any extracted in-memory texture payloads for asynchronous background processing.
     /// </summary>
-    public static (Model Model, List<EmbeddedTexturePayload> EmbeddedTextures) ImportAndCache(Graphics graphics, string sourcePath, string cachePath, ModelLoadOptions options)
+    public static (Model Model, List<EmbeddedTexturePayload> EmbeddedTextures) ImportAndCache(
+        Graphics graphics, string sourcePath, string cachePath, ModelLoadOptions options, AssetLoadOperation? operation = null)
     {
+        operation?.UpdateStatus("Importing scene via Assimp...", 0.1f);
         var assimp = GetAssimpApi();
         var scene = assimp.ImportFile(sourcePath, options.AssimpFlagsMask);
 
@@ -59,7 +62,7 @@ public static unsafe class AssimpImporter
             throw new InvalidOperationException($"Failed to import model '{sourcePath}': {error}");
         }
 
-        var (texNames, payloads, materialDiffuseIndices, materialNormalIndices) = ExtractEmbeddedTextures(assimp, scene, sourcePath, options);
+        var (texNames, payloads, materialDiffuseIndices, materialNormalIndices) = ExtractEmbeddedTextures(assimp, scene, sourcePath, options, operation);
 
         var boneInfoMap = new Dictionary<string, BoneInfo>(StringComparer.OrdinalIgnoreCase);
         var parts = new List<ProcessedPart>();
@@ -112,6 +115,7 @@ public static unsafe class AssimpImporter
             }
         }
 
+        operation?.UpdateStatus("Writing binary model cache...", 0.9f);
         WriteBinary(cachePath, options, parts, boneInfoMap, animatorNodes, animations, inverseGlobalTransform, texNames);
 
         var model = BinaryModelReader.Read(graphics, cachePath);
@@ -563,7 +567,7 @@ public static unsafe class AssimpImporter
     }
 
     private static (List<string> TextureNames, List<EmbeddedTexturePayload> Payloads, Dictionary<int, int> MaterialDiffuseIndices, Dictionary<int, int> MaterialNormalIndices) ExtractEmbeddedTextures(
-        Assimp assimp, AssimpScene* scene, string sourcePath, ModelLoadOptions options)
+        Assimp assimp, AssimpScene* scene, string sourcePath, ModelLoadOptions options, AssetLoadOperation? operation = null)
     {
         List<string> texNames = [];
         List<EmbeddedTexturePayload> payloads = [];
@@ -587,6 +591,7 @@ public static unsafe class AssimpImporter
 
         for (int i = 0; i < embeddedCount; i++)
         {
+            operation?.UpdateStatus($"Extracting textures ({i + 1}/{embeddedCount})", 0.1f + 0.4f * ((float)(i + 1) / embeddedCount));
             var tex = scene->MTextures[i];
             string rawName = Marshal.PtrToStringAnsi((nint)tex->MFilename.Data) ?? "";
             string baseName = Path.GetFileNameWithoutExtension(rawName);
