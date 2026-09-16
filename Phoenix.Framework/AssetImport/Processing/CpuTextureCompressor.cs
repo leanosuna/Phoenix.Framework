@@ -1,15 +1,27 @@
-using BCnEncoder.Encoder;
-using BCnEncoder.Shared;
+using Phoenix;
+using System.Runtime.InteropServices;
 
 namespace Phoenix.Framework.AssetImport.Processing;
 
 /// <summary>
-/// Provides multithreaded CPU block compression and mipmap generation for 2D textures.
+/// Central facade and factory providing CPU texture block compression.
+/// Defaults to Compressonator on Windows and Linux, falling back to BCnEncoder.NET on macOS or if native libraries are missing.
 /// </summary>
 public static class CpuTextureCompressor
 {
+    private static ITextureCompressor _compressor = CreateDefaultCompressor();
+
     /// <summary>
-    /// Encodes raw RGBA32 pixel data to the specified BCn compression format, generating mipmaps if requested.
+    /// Gets or sets the active texture compression engine.
+    /// </summary>
+    public static ITextureCompressor ActiveCompressor
+    {
+        get => _compressor;
+        set => _compressor = value ?? CreateDefaultCompressor();
+    }
+
+    /// <summary>
+    /// Encodes raw RGBA32 pixel data into the specified block compression format using the active compression engine.
     /// </summary>
     public static CompressedTextureData Compress(
         byte[] rgbaPixels,
@@ -19,52 +31,31 @@ public static class CpuTextureCompressor
         bool generateMipmaps = true,
         bool isSRgb = true)
     {
-        if (format == TextureCompressionFormat.None)
-        {
-            List<CompressedMipLevel> rawMips =
-            [
-                new CompressedMipLevel(width, height, rgbaPixels)
-            ];
-            return new CompressedTextureData(width, height, format, isSRgb, rawMips);
-        }
-
-        var bcFormat = MapFormat(format);
-        var encoder = new BcEncoder
-        {
-            OutputOptions =
-            {
-                Format = bcFormat,
-                GenerateMipMaps = generateMipmaps,
-                Quality = CompressionQuality.Fast
-            }
-        };
-
-        int mipCount = 1;
-        if (generateMipmaps)
-        {
-            mipCount = encoder.CalculateNumberOfMipLevels(width, height);
-        }
-
-        byte[][] encodedMips = encoder.EncodeToRawBytes(rgbaPixels, width, height, PixelFormat.Rgba32);
-
-        List<CompressedMipLevel> mips = new(encodedMips.Length);
-        for (int i = 0; i < encodedMips.Length; i++)
-        {
-            int mW = Math.Max(1, width >> i);
-            int mH = Math.Max(1, height >> i);
-            mips.Add(new CompressedMipLevel(mW, mH, encodedMips[i]));
-        }
-
-        return new CompressedTextureData(width, height, format, isSRgb, mips);
+        return _compressor.Compress(rgbaPixels, width, height, format, generateMipmaps, isSRgb);
     }
 
-    private static CompressionFormat MapFormat(TextureCompressionFormat format) => format switch
+    private static ITextureCompressor CreateDefaultCompressor()
     {
-        TextureCompressionFormat.BC1 => CompressionFormat.Bc1,
-        TextureCompressionFormat.BC3 => CompressionFormat.Bc3,
-        TextureCompressionFormat.BC4 => CompressionFormat.Bc4,
-        TextureCompressionFormat.BC5 => CompressionFormat.Bc5,
-        TextureCompressionFormat.BC7 => CompressionFormat.Bc7,
-        _ => CompressionFormat.Bc7
-    };
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            try
+            {
+                if (Compressonator.NET.SDK_NativeMethods.IsSupported)
+                {
+                    Log.Info("[CpuTextureCompressor] Selected Compressonator.NET (SuperFast, q=0.05) as active texture compressor.");
+                    return new CompressonatorTextureCompressor();
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"[CpuTextureCompressor] Compressonator native initialization failed: {ex.Message}. Falling back to BCnEncoder.NET.");
+            }
+        }
+        else
+        {
+            Log.Info("[CpuTextureCompressor] macOS detected. Selected BCnEncoder.NET as active texture compressor.");
+        }
+
+        return new BCnEncoderTextureCompressor();
+    }
 }

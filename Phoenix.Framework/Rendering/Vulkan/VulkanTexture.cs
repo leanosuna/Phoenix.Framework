@@ -2,6 +2,7 @@ using Phoenix.Framework.AssetImport;
 using Phoenix.Framework.AssetImport.Processing;
 using Silk.NET.Vulkan;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 using VkImage = Silk.NET.Vulkan.Image;
 
 namespace Phoenix.Framework.Rendering.Vulkan;
@@ -474,6 +475,7 @@ public sealed unsafe class VulkanTexture : IDisposable
         TextureLoadOptions? options = null, Format format = Format.R8G8B8A8Srgb)
     {
         using var image = SixLabors.ImageSharp.Image.Load<Rgba32>(filePath);
+        ApplySizeLimit(image, options);
         byte[] pixels = new byte[image.Width * image.Height * 4];
         image.CopyPixelDataTo(pixels);
         return new VulkanTexture(context, bindless, image.Width, image.Height, pixels, options, format);
@@ -486,9 +488,34 @@ public sealed unsafe class VulkanTexture : IDisposable
         TextureLoadOptions? options = null, Format format = Format.R8G8B8A8Srgb)
     {
         using var image = SixLabors.ImageSharp.Image.Load<Rgba32>(stream);
+        ApplySizeLimit(image, options);
         byte[] pixels = new byte[image.Width * image.Height * 4];
         image.CopyPixelDataTo(pixels);
         return new VulkanTexture(context, bindless, image.Width, image.Height, pixels, options, format);
+    }
+
+    private static void ApplySizeLimit(SixLabors.ImageSharp.Image<Rgba32> image, TextureLoadOptions? options)
+    {
+        if (options == null || !options.LimitSize)
+            return;
+
+        int maxDim = options.MaxSize > 0 ? options.MaxSize : 1024;
+        if (image.Width <= maxDim && image.Height <= maxDim)
+            return;
+
+        int targetW, targetH;
+        if (image.Width >= image.Height)
+        {
+            targetW = maxDim;
+            targetH = Math.Max(1, (int)Math.Round((double)image.Height * maxDim / image.Width));
+        }
+        else
+        {
+            targetH = maxDim;
+            targetW = Math.Max(1, (int)Math.Round((double)image.Width * maxDim / image.Height));
+        }
+
+        image.Mutate(x => x.Resize(targetW, targetH));
     }
 
     /// <summary>

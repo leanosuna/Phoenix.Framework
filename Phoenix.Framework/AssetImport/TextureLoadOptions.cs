@@ -8,6 +8,8 @@ public sealed class TextureLoadOptions
     public bool GenerateMipmaps { get; set; } = true;
     public TextureCompressionFormat Compression { get; set; } = TextureCompressionFormat.BC7;
     public bool IsSRgb { get; set; } = true;
+    public bool LimitSize { get; set; } = true;
+    public int MaxSize { get; set; } = 1024;
     public float Anisotropic { get; set; } = 16.0f;
     public TextureWrapMode WrapU { get; set; } = TextureWrapMode.Repeat;
     public TextureWrapMode WrapV { get; set; } = TextureWrapMode.Repeat;
@@ -20,6 +22,8 @@ public sealed class TextureLoadOptions
         GenerateMipmaps = GenerateMipmaps,
         Compression = Compression,
         IsSRgb = IsSRgb,
+        LimitSize = LimitSize,
+        MaxSize = MaxSize,
         Anisotropic = Anisotropic,
         WrapU = WrapU,
         WrapV = WrapV,

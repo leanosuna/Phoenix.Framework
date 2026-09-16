@@ -64,6 +64,8 @@ public sealed class AssetLoadOperation
             IsCompleted = true;
             EndTime = DateTime.UtcNow;
         }
+
+        AssetLoadingTracker.NotifyOperationCompleted(this);
     }
 
     public void Fail(string errorMessage)
@@ -79,5 +81,7 @@ public sealed class AssetLoadOperation
             IsCompleted = true;
             EndTime = DateTime.UtcNow;
         }
+
+        AssetLoadingTracker.NotifyOperationFailed(this);
     }
 }

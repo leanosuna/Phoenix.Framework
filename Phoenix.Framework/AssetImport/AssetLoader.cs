@@ -8,6 +8,7 @@ using Phoenix.Framework.Rendering.Vulkan;
 using Silk.NET.Shaderc;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -170,6 +171,43 @@ public static class AssetLoader
 
             CompressedTextureData texData = await Task.Run(() =>
             {
+                int maxDim = resolvedOptions.MaxSize > 0 ? resolvedOptions.MaxSize : 1024;
+                int expectedW = -1;
+                int expectedH = -1;
+                if (File.Exists(resolved))
+                {
+                    try
+                    {
+                        var imageInfo = Image.Identify(resolved);
+                        if (imageInfo != null)
+                        {
+                            int origW = imageInfo.Width;
+                            int origH = imageInfo.Height;
+                            if (resolvedOptions.LimitSize && (origW > maxDim || origH > maxDim))
+                            {
+                                if (origW >= origH)
+                                {
+                                    expectedW = maxDim;
+                                    expectedH = Math.Max(1, (int)Math.Round((double)origH * maxDim / origW));
+                                }
+                                else
+                                {
+                                    expectedH = maxDim;
+                                    expectedW = Math.Max(1, (int)Math.Round((double)origW * maxDim / origH));
+                                }
+                            }
+                            else
+                            {
+                                expectedW = origW;
+                                expectedH = origH;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
                 if (File.Exists(cacheFile))
                 {
                     try
@@ -189,7 +227,9 @@ public static class AssetLoader
                                 int mipCount = br.ReadInt32();
 
                                 bool formatMatches = format == resolvedOptions.Compression && isSRgb == resolvedOptions.IsSRgb;
-                                bool notStale = File.GetLastWriteTimeUtc(cacheFile) >= File.GetLastWriteTimeUtc(resolved);
+                                bool sizeMatches = expectedW <= 0 || (width == expectedW && height == expectedH);
+                                bool notStale = File.GetLastWriteTimeUtc(cacheFile) >= File.GetLastWriteTimeUtc(resolved) &&
+                                                (sourceFile == null || File.GetLastWriteTimeUtc(cacheFile) >= File.GetLastWriteTimeUtc(sourceFile));
                                 bool mipsMatch = !resolvedOptions.GenerateMipmaps || mipCount > 1 || (width == 1 && height == 1);
 
                                 if (!formatMatches)
@@ -197,9 +237,14 @@ public static class AssetLoader
                                     op.UpdateStatus($"Format mismatch (cached: {format}, desired: {resolvedOptions.Compression}). Re-encoding...", 0.2f);
                                     Log.Info($"[AssetLoader] Texture '{Path.GetFileName(resolved)}' compression format mismatch (cached: {format}, desired: {resolvedOptions.Compression}, sRGB: {isSRgb} vs {resolvedOptions.IsSRgb}). Re-encoding...");
                                 }
+                                else if (!sizeMatches)
+                                {
+                                    op.UpdateStatus($"Size mismatch (cached: {width}x{height}, desired: {expectedW}x{expectedH}). Re-encoding...", 0.2f);
+                                    Log.Info($"[AssetLoader] Texture '{Path.GetFileName(resolved)}' size mismatch (cached: {width}x{height}, desired: {expectedW}x{expectedH}). Re-encoding...");
+                                }
                                 else if (notStale && mipsMatch)
                                 {
-                                    op.UpdateStatus($"Reading cached {format}...", 0.5f);
+                                    op.UpdateStatus($"Reading cached {format} ({width}x{height})...", 0.5f);
                                     List<CompressedMipLevel> mips = new(mipCount);
                                     for (int i = 0; i < mipCount; i++)
                                     {
@@ -222,6 +267,25 @@ public static class AssetLoader
 
                 op.UpdateStatus($"Encoding ({resolvedOptions.Compression})...", 0.35f);
                 using var image = Image.Load<Rgba32>(resolved);
+                if (resolvedOptions.LimitSize && (image.Width > maxDim || image.Height > maxDim))
+                {
+                    int targetW, targetH;
+                    if (image.Width >= image.Height)
+                    {
+                        targetW = maxDim;
+                        targetH = Math.Max(1, (int)Math.Round((double)image.Height * maxDim / image.Width));
+                    }
+                    else
+                    {
+                        targetH = maxDim;
+                        targetW = Math.Max(1, (int)Math.Round((double)image.Width * maxDim / image.Height));
+                    }
+
+                    op.UpdateStatus($"Downscaling {image.Width}x{image.Height} -> {targetW}x{targetH}...", 0.3f);
+                    Log.Info($"[AssetLoader] Limiting texture '{Path.GetFileName(resolved)}' size: {image.Width}x{image.Height} -> {targetW}x{targetH}");
+                    image.Mutate(x => x.Resize(targetW, targetH));
+                }
+
                 int w = image.Width;
                 int h = image.Height;
                 byte[] pixels = new byte[w * h * 4];
@@ -495,6 +559,8 @@ public static class AssetLoader
         sb.Append((int)options.Compression);
         sb.Append(options.IsSRgb);
         sb.Append(options.GenerateMipmaps);
+        sb.Append(options.LimitSize);
+        sb.Append(options.MaxSize);
         sb.Append(options.Anisotropic);
         sb.Append((int)options.WrapU);
         sb.Append((int)options.WrapV);

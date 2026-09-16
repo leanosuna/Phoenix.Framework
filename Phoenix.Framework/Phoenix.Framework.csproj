@@ -40,6 +40,7 @@
     <PackageReference Include="Silk.NET.Assimp" Version="2.23.0" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
     <PackageReference Include="BCnEncoder.Net" Version="2.3.0" />
+    <PackageReference Include="YellowDogMan.Compressonator.NET" Version="1.1.2" />
     <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
     <PackageReference Include="Box3D.NET" Version="0.4.0" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="all" />

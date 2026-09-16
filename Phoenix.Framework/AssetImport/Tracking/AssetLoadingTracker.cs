@@ -68,12 +68,10 @@ public static class AssetLoadingTracker
         }
     }
 
-    public static void CompleteOperation(string id, string finalStatus = "Completed")
+    internal static void NotifyOperationCompleted(AssetLoadOperation op)
     {
-        if (_activeOperations.TryRemove(id, out var op))
+        if (_activeOperations.TryRemove(op.Id, out _))
         {
-            op.Complete(finalStatus);
-
             lock (_statsLock)
             {
                 _completedOperations++;
@@ -86,12 +84,10 @@ public static class AssetLoadingTracker
         }
     }
 
-    public static void FailOperation(string id, string errorMessage)
+    internal static void NotifyOperationFailed(AssetLoadOperation op)
     {
-        if (_activeOperations.TryRemove(id, out var op))
+        if (_activeOperations.TryRemove(op.Id, out _))
         {
-            op.Fail(errorMessage);
-
             lock (_statsLock)
             {
                 _completedOperations++;
@@ -101,6 +97,22 @@ public static class AssetLoadingTracker
             while (_recentOperations.Count > MaxRecentHistory && _recentOperations.TryDequeue(out _))
             {
             }
+        }
+    }
+
+    public static void CompleteOperation(string id, string finalStatus = "Completed")
+    {
+        if (_activeOperations.TryGetValue(id, out var op))
+        {
+            op.Complete(finalStatus);
+        }
+    }
+
+    public static void FailOperation(string id, string errorMessage)
+    {
+        if (_activeOperations.TryGetValue(id, out var op))
+        {
+            op.Fail(errorMessage);
         }
     }
 

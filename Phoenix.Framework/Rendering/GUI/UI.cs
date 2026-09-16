@@ -47,6 +47,7 @@ public sealed class UI : IDisposable
 
         string fontPath = EmbeddedHelper.ExtractPath("CascadiaMono.ttf", "Files.Fonts");
         LoadFontTTF(fontPath, sizes.ToArray());
+        SetFontSize(18);
     }
 
     /// <summary>

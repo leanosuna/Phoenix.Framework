@@ -32,10 +32,10 @@ public sealed class PhysicsWorld : IDisposable
     {
         Vector3 grav = gravity ?? new Vector3(0f, -9.81f, 0f);
 
-        WorldSettings config = settings ?? new WorldSettings
+        WorldSettings config = settings ?? (WorldSettings.Default with
         {
             Gravity = grav
-        };
+        });
 
         _world = new Box3D.PhysicsWorld(config);
         _world.Gravity = grav;

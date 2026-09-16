@@ -9,6 +9,8 @@ namespace Phoenix.Framework.Rendering.GUI;
 /// </summary>
 public static class AssetLoadingDebugWindow
 {
+    private static bool _wasLoading;
+
     public static bool Show { get; set; } = true;
     public static bool AutoShowOnLoading { get; set; } = true;
 
@@ -17,10 +19,12 @@ public static class AssetLoadingDebugWindow
     /// </summary>
     internal static void Update(float deltaTime)
     {
-        if (AutoShowOnLoading && AssetLoadingTracker.IsLoading)
+        bool isLoading = AssetLoadingTracker.IsLoading;
+        if (AutoShowOnLoading && isLoading && !_wasLoading)
         {
             Show = true;
         }
+        _wasLoading = isLoading;
     }
 
     /// <summary>
