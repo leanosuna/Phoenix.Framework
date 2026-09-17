@@ -286,13 +286,21 @@ public abstract class PhoenixGame : IDisposable
         Graphics.RenderContext.Prepare(cmd, imageIndex, Graphics.Swapchain.CurrentFrame);
 
         if (!Graphics.RenderHalt)
+        {
             Render(Graphics.RenderContext, deltaTime);
 
-        if (!Graphics.RenderContext.HasRenderedPass)
-            Graphics.RenderContext.FallbackClearPass(Graphics.ClearColor);
+            if (Gizmos.Enabled && Gizmos.HasCommands)
+                Gizmos.Render(Graphics.RenderContext);
+        }
 
-        if (Gizmos.Enabled && Gizmos.HasCommands)
-            Gizmos.Render(Graphics.RenderContext);
+        if (Graphics.Viewport.Enabled)
+        {
+            Graphics.RenderContext.BlitToSwapchain(Graphics.SceneRenderTarget, Graphics.Viewport.Filter);
+        }
+        else if (!Graphics.RenderContext.HasRenderedPass)
+        {
+            Graphics.RenderContext.FallbackClearPass(Graphics.ClearColor);
+        }
 
         RenderUI();
         UI.Render(Graphics.RenderContext);

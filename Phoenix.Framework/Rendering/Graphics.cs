@@ -96,6 +96,11 @@ public sealed class Graphics : IDisposable
     }
 
     /// <summary>
+    /// Gets the primary offscreen scene render target.
+    /// </summary>
+    public VulkanRenderTarget SceneRenderTarget { get; private set; } = default!;
+
+    /// <summary>
     /// Initializes graphics subsystems, Vulkan context, swapchain, uniform buffers, bindless manager, and viewport.
     /// </summary>
     internal Graphics(PhoenixGame game)
@@ -106,8 +111,34 @@ public sealed class Graphics : IDisposable
         CommonUbo = new CommonUBOManager(Context);
         BindlessManager = new BindlessManager(Context);
         BoneLayout = CreateBoneLayout();
-        RenderContext = new RenderContext(Context, Swapchain, CommonUbo, BindlessManager);
         Viewport = new RenderViewport(game);
+        SceneRenderTarget = CreateRenderTarget(Viewport.Width, Viewport.Height, Swapchain.ImageFormat, true, Swapchain.DepthFormat);
+        RenderContext = new RenderContext(this);
+    }
+
+    /// <summary>
+    /// Creates an offscreen render target with optional depth buffer.
+    /// </summary>
+    public VulkanRenderTarget CreateRenderTarget(uint width, uint height, Format colorFormat = Format.R8G8B8A8Unorm, bool hasDepth = true, Format? depthFormat = null)
+    {
+        return new VulkanRenderTarget(Context, BindlessManager, width, height, colorFormat, hasDepth, depthFormat);
+    }
+
+    /// <summary>
+    /// Creates a multi-render-target (MRT) offscreen framebuffer with optional depth buffer.
+    /// </summary>
+    public VulkanRenderTarget CreateRenderTarget(uint width, uint height, ReadOnlySpan<Format> colorFormats, bool hasDepth = true, Format? depthFormat = null)
+    {
+        return new VulkanRenderTarget(Context, BindlessManager, width, height, colorFormats, hasDepth, depthFormat);
+    }
+
+    internal void HandleViewportResize()
+    {
+        if (SceneRenderTarget != null && (SceneRenderTarget.Width != Viewport.Width || SceneRenderTarget.Height != Viewport.Height))
+        {
+            Context.WaitIdle();
+            SceneRenderTarget.Resize(Viewport.Width, Viewport.Height);
+        }
     }
 
     /// <summary>
@@ -198,11 +229,29 @@ public sealed class Graphics : IDisposable
     }
 
     /// <summary>
-    /// Recreates swapchain resources upon window resize.
+    /// Creates a compute pipeline layout and VkPipeline handle from compute SPIR-V bytecode.
+    /// </summary>
+    public VulkanComputePipeline CreateComputePipeline(byte[] computeSpv, DescriptorSetLayout[]? descriptorSetLayouts = null, uint pushConstantsSize = 80)
+    {
+        return new VulkanComputePipeline(Context, computeSpv, descriptorSetLayouts, pushConstantsSize);
+    }
+
+    /// <summary>
+    /// Creates a GPU storage buffer (SSBO) for compute shaders or indirect drawing.
+    /// </summary>
+    public VulkanStorageBuffer CreateStorageBuffer(ulong size)
+    {
+        return new VulkanStorageBuffer(Context, size);
+    }
+
+
+    /// <summary>
+    /// Recreates swapchain resources and updates scene render target dimensions upon window resize.
     /// </summary>
     internal void Resize(Vector2D<int> size)
     {
         Swapchain.Recreate(size);
+        HandleViewportResize();
     }
 
     /// <summary>
@@ -288,6 +337,83 @@ public sealed class Graphics : IDisposable
     }
 
     /// <summary>
+    /// Creates a descriptor set layout for a single storage buffer at the specified binding.
+    /// </summary>
+    public unsafe DescriptorSetLayout CreateStorageBufferLayout(ShaderStageFlags stageFlags = ShaderStageFlags.ComputeBit, uint binding = 0)
+    {
+        DescriptorSetLayoutBinding b = new()
+        {
+            Binding = binding,
+            DescriptorType = DescriptorType.StorageBuffer,
+            DescriptorCount = 1,
+            StageFlags = stageFlags
+        };
+
+        DescriptorSetLayoutCreateInfo info = new()
+        {
+            SType = StructureType.DescriptorSetLayoutCreateInfo,
+            BindingCount = 1,
+            PBindings = &b
+        };
+
+        VulkanHelper.Check(Context.Vk.CreateDescriptorSetLayout(Context.Device, in info, null, out var layout),
+            "Failed to create storage buffer descriptor set layout.");
+
+        return layout;
+    }
+
+    /// <summary>
+    /// Allocates a descriptor pool and descriptor set bound to a storage buffer.
+    /// </summary>
+    public unsafe (DescriptorPool Pool, DescriptorSet Set) CreateStorageBufferDescriptorSet(DescriptorSetLayout layout, VulkanStorageBuffer buffer, uint binding = 0)
+    {
+        DescriptorPoolSize poolSize = new()
+        {
+            Type = DescriptorType.StorageBuffer,
+            DescriptorCount = 1
+        };
+
+        DescriptorPoolCreateInfo poolInfo = new()
+        {
+            SType = StructureType.DescriptorPoolCreateInfo,
+            PoolSizeCount = 1,
+            PPoolSizes = &poolSize,
+            MaxSets = 1
+        };
+
+        VulkanHelper.Check(Context.Vk.CreateDescriptorPool(Context.Device, in poolInfo, null, out var pool),
+            "Failed to create storage buffer descriptor pool.");
+
+        DescriptorSetAllocateInfo allocInfo = new()
+        {
+            SType = StructureType.DescriptorSetAllocateInfo,
+            DescriptorPool = pool,
+            DescriptorSetCount = 1,
+            PSetLayouts = &layout
+        };
+
+        VulkanHelper.Check(Context.Vk.AllocateDescriptorSets(Context.Device, in allocInfo, out var set),
+            "Failed to allocate storage buffer descriptor set.");
+
+        var bufferInfo = buffer.GetDescriptorInfo();
+
+        WriteDescriptorSet write = new()
+        {
+            SType = StructureType.WriteDescriptorSet,
+            DstSet = set,
+            DstBinding = binding,
+            DstArrayElement = 0,
+            DescriptorType = DescriptorType.StorageBuffer,
+            DescriptorCount = 1,
+            PBufferInfo = &bufferInfo
+        };
+
+        Context.Vk.UpdateDescriptorSets(Context.Device, 1, in write, 0, null);
+
+        return (pool, set);
+    }
+
+    /// <summary>
     /// Waits for all submitted GPU commands across all queues to finish execution.
     /// </summary>
     public void WaitIdle()
@@ -315,6 +441,7 @@ public sealed class Graphics : IDisposable
             BoneLayout = default;
         }
 
+        SceneRenderTarget?.Dispose();
         BindlessManager.Dispose();
         CommonUbo.Dispose();
         Swapchain.Dispose();

@@ -1,51 +1,75 @@
 using Silk.NET.Vulkan;
 using System.Numerics;
 
-namespace Phoenix.Framework.Rendering
+namespace Phoenix.Framework.Rendering;
+
+/// <summary>
+/// Controls internal rendering resolution scaling, dimension calculations, and upscaling filters.
+/// </summary>
+public sealed class RenderViewport
 {
-    public class RenderViewport
+    private readonly PhoenixGame _game;
+    private Vector2 _scale = Vector2.One;
+
+    /// <summary>
+    /// Gets or sets internal render resolution scale relative to the window framebuffer.
+    /// Values are clamped between 0.05 and 4.0. Default is (1, 1).
+    /// </summary>
+    public Vector2 Scale
     {
-        public Vector2 Size { 
-            get => _game.FramebufferSize * Scale;
-            set
-            {
-                if (value.X < 0 || value.Y < 0 ||
-                    float.IsNaN(value.X) || float.IsNaN(value.Y) ||
-                    float.IsInfinity(value.X) || float.IsInfinity(value.Y))
-                    return;
-
-                var fb = _game.FramebufferSize;
-                if (fb.X <= 0 || fb.Y <= 0)
-                    return;
-
-                Scale = value / fb;
-            }
-        }
-        public float Width => Size.X;
-
-        public float Height => Size.Y;
-
-        public Vector2 Scale
+        get => _scale;
+        set
         {
-            get;
-            set
-            {
-                if (value.X < 0 || value.X > 1 || value.Y < 0 || value.Y > 1)
-                    return;
+            float x = Math.Clamp(value.X, 0.05f, 4.0f);
+            float y = Math.Clamp(value.Y, 0.05f, 4.0f);
+            Vector2 clamped = new(x, y);
 
-                field = value;
-            }
-        } = Vector2.One;
+            if (_scale == clamped)
+                return;
 
-        public Filter Filter { get; set; } = Filter.Linear;
-        private PhoenixGame _game;
-        
-        internal RenderViewport(PhoenixGame game)
-        {
-            _game = game;
-                
+            _scale = clamped;
+            _game.Graphics.HandleViewportResize();
         }
+    }
 
-        
+    /// <summary>
+    /// Gets or sets uniform scale across both axes.
+    /// </summary>
+    public float UniformScale
+    {
+        get => _scale.X;
+        set => Scale = new Vector2(value, value);
+    }
+
+    /// <summary>
+    /// Gets effective rendering size in pixels.
+    /// </summary>
+    public Vector2 Size => new((float)Math.Max(1, (int)(_game.FramebufferWidth * _scale.X)),
+                               (float)Math.Max(1, (int)(_game.FramebufferHeight * _scale.Y)));
+
+    /// <summary>
+    /// Gets effective rendering width in pixels.
+    /// </summary>
+    public uint Width => (uint)Math.Max(1, (int)Size.X);
+
+    /// <summary>
+    /// Gets effective rendering height in pixels.
+    /// </summary>
+    public uint Height => (uint)Math.Max(1, (int)Size.Y);
+
+    /// <summary>
+    /// Gets or sets hardware texture filtering applied when blitting the rendered scene to the swapchain.
+    /// </summary>
+    public Filter Filter { get; set; } = Filter.Linear;
+
+    /// <summary>
+    /// Gets or sets whether offscreen scene target scaling is enabled.
+    /// When false, rendering passes write directly to the swapchain image.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    internal RenderViewport(PhoenixGame game)
+    {
+        _game = game;
     }
 }

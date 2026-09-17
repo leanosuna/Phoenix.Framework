@@ -22,5 +22,6 @@ public sealed record VulkanPipelineDescription
     public DescriptorSetLayout[] DescriptorSetLayouts { get; init; } = [];
     public uint PushConstantsSize { get; init; } = 80;
     public Format ColorFormat { get; init; }
+    public Format[] ColorFormats { get; init; } = [];
     public Format DepthFormat { get; init; }
 }

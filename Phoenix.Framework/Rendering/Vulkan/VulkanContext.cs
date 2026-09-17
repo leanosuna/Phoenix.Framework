@@ -50,6 +50,17 @@ public sealed unsafe class VulkanContext : IDisposable
     public uint? TransferFamilyIndex => _transferFamilyIndex;
 
     /// <summary>
+    /// Waits for all operations on the logical device to complete.
+    /// </summary>
+    public void WaitIdle()
+    {
+        lock (GraphicsQueueLock)
+        {
+            _vk.DeviceWaitIdle(_device);
+        }
+    }
+
+    /// <summary>
     /// Initializes the core Vulkan context, creating the instance, surface, physical device, and logical device.
     /// </summary>
     public VulkanContext(IWindow window, string applicationName = "Phoenix Game", bool enableValidation = true)

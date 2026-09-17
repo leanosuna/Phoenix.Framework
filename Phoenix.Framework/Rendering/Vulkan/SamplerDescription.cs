@@ -37,6 +37,26 @@ public readonly record struct SamplerDescription(
             maxAniso);
     }
 
+    public static SamplerDescription LinearClamp => new(
+        SamplerAddressMode.ClampToEdge,
+        SamplerAddressMode.ClampToEdge,
+        SamplerAddressMode.ClampToEdge,
+        Filter.Linear,
+        Filter.Linear,
+        SamplerMipmapMode.Linear,
+        false,
+        1.0f);
+
+    public static SamplerDescription NearestClamp => new(
+        SamplerAddressMode.ClampToEdge,
+        SamplerAddressMode.ClampToEdge,
+        SamplerAddressMode.ClampToEdge,
+        Filter.Nearest,
+        Filter.Nearest,
+        SamplerMipmapMode.Nearest,
+        false,
+        1.0f);
+
     private static SamplerAddressMode MapWrapMode(TextureWrapMode mode) => mode switch
     {
         TextureWrapMode.Repeat => SamplerAddressMode.Repeat,

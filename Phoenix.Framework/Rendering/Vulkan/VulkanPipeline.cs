@@ -136,48 +136,54 @@ public sealed unsafe class VulkanPipeline : IDisposable
                 StencilTestEnable = false
             };
 
-            PipelineColorBlendAttachmentState colorBlendAttachment = new()
+            Format[] colorFormats = desc.ColorFormats.Length > 0 ? desc.ColorFormats : [desc.ColorFormat];
+            PipelineColorBlendAttachmentState[] blendAttachments = new PipelineColorBlendAttachmentState[colorFormats.Length];
+            for (int i = 0; i < colorFormats.Length; i++)
             {
-                ColorWriteMask = ColorComponentFlags.RBit | ColorComponentFlags.GBit | ColorComponentFlags.BBit | ColorComponentFlags.ABit,
-                BlendEnable = desc.BlendEnable,
-                SrcColorBlendFactor = BlendFactor.SrcAlpha,
-                DstColorBlendFactor = BlendFactor.OneMinusSrcAlpha,
-                ColorBlendOp = BlendOp.Add,
-                SrcAlphaBlendFactor = BlendFactor.One,
-                DstAlphaBlendFactor = BlendFactor.Zero,
-                AlphaBlendOp = BlendOp.Add
-            };
+                blendAttachments[i] = new PipelineColorBlendAttachmentState
+                {
+                    ColorWriteMask = ColorComponentFlags.RBit | ColorComponentFlags.GBit | ColorComponentFlags.BBit | ColorComponentFlags.ABit,
+                    BlendEnable = desc.BlendEnable,
+                    SrcColorBlendFactor = BlendFactor.SrcAlpha,
+                    DstColorBlendFactor = BlendFactor.OneMinusSrcAlpha,
+                    ColorBlendOp = BlendOp.Add,
+                    SrcAlphaBlendFactor = BlendFactor.One,
+                    DstAlphaBlendFactor = BlendFactor.Zero,
+                    AlphaBlendOp = BlendOp.Add
+                };
+            }
 
-            PipelineColorBlendStateCreateInfo colorBlending = new()
+            fixed (PipelineColorBlendAttachmentState* pBlendAttachments = blendAttachments)
+            fixed (Format* pColorFormats = colorFormats)
             {
-                SType = StructureType.PipelineColorBlendStateCreateInfo,
-                LogicOpEnable = false,
-                AttachmentCount = 1,
-                PAttachments = &colorBlendAttachment
-            };
+                PipelineColorBlendStateCreateInfo colorBlending = new()
+                {
+                    SType = StructureType.PipelineColorBlendStateCreateInfo,
+                    LogicOpEnable = false,
+                    AttachmentCount = (uint)colorFormats.Length,
+                    PAttachments = pBlendAttachments
+                };
 
-            DynamicState* dynamicStates = stackalloc DynamicState[]
-            {
-                DynamicState.Viewport,
-                DynamicState.Scissor
-            };
+                DynamicState* dynamicStates = stackalloc DynamicState[]
+                {
+                    DynamicState.Viewport,
+                    DynamicState.Scissor
+                };
 
-            PipelineDynamicStateCreateInfo dynamicStateInfo = new()
-            {
-                SType = StructureType.PipelineDynamicStateCreateInfo,
-                DynamicStateCount = 2,
-                PDynamicStates = dynamicStates
-            };
+                PipelineDynamicStateCreateInfo dynamicStateInfo = new()
+                {
+                    SType = StructureType.PipelineDynamicStateCreateInfo,
+                    DynamicStateCount = 2,
+                    PDynamicStates = dynamicStates
+                };
 
-
-            Format colorFormat = desc.ColorFormat;
-            PipelineRenderingCreateInfo renderingInfo = new()
-            {
-                SType = StructureType.PipelineRenderingCreateInfo,
-                ColorAttachmentCount = 1,
-                PColorAttachmentFormats = &colorFormat,
-                DepthAttachmentFormat = desc.DepthFormat
-            };
+                PipelineRenderingCreateInfo renderingInfo = new()
+                {
+                    SType = StructureType.PipelineRenderingCreateInfo,
+                    ColorAttachmentCount = (uint)colorFormats.Length,
+                    PColorAttachmentFormats = pColorFormats,
+                    DepthAttachmentFormat = desc.DepthFormat
+                };
 
             GraphicsPipelineCreateInfo pipelineInfo = new()
             {
@@ -206,6 +212,7 @@ public sealed unsafe class VulkanPipeline : IDisposable
             _context.Vk.DestroyShaderModule(_context.Device, fragModule, null);
         }
     }
+}
 
     /// <summary>
     /// Creates a VkShaderModule handle from raw SPIR-V bytecode.

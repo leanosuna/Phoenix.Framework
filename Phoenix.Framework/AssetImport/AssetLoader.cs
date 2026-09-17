@@ -123,6 +123,19 @@ public static class AssetLoader
     }
 
     /// <summary>
+    /// Loads and compiles a GLSL compute shader into SPIR-V bytecode with disk caching.
+    /// </summary>
+    public static byte[] LoadComputeShader(string computePath)
+    {
+        string resolvedCompute = ResolvePath(computePath);
+        if (!File.Exists(resolvedCompute))
+            throw new FileNotFoundException($"Compute shader not found: {resolvedCompute}", resolvedCompute);
+
+        string shaderCacheDir = Path.Combine(_cacheRoot, "shaders");
+        return ShaderCompiler.LoadOrCompile(resolvedCompute, ShaderKind.ComputeShader, shaderCacheDir);
+    }
+
+    /// <summary>
     /// Loads a 2D image file, uploads it to GPU device memory, and registers it into the bindless descriptor set.
     /// Resolves options via sidecar JSON, central configuration, or code parameters, and caches decoded data on disk.
     /// </summary>

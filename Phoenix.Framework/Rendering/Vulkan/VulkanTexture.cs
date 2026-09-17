@@ -115,6 +115,87 @@ public sealed unsafe class VulkanTexture : IDisposable
     }
 
     /// <summary>
+    /// Creates a GPU-resident offscreen render target texture without initial pixel staging upload.
+    /// Allocates optimal device-local memory and registers into the global bindless manager.
+    /// </summary>
+    public VulkanTexture(VulkanContext context, BindlessManager bindless, uint width, uint height,
+        Format format, ImageUsageFlags usageFlags, SamplerDescription? samplerDesc = null)
+    {
+        _context = context;
+        _bindlessManager = bindless;
+        _width = width;
+        _height = height;
+        _format = format;
+        _mipLevels = 1;
+        Options = new TextureLoadOptions { GenerateMipmaps = false };
+        _ownsSlot = true;
+
+        ImageCreateInfo imageInfo = new()
+        {
+            SType = StructureType.ImageCreateInfo,
+            ImageType = ImageType.Type2D,
+            Extent = new Extent3D(width, height, 1),
+            MipLevels = 1,
+            ArrayLayers = 1,
+            Format = format,
+            Tiling = ImageTiling.Optimal,
+            InitialLayout = ImageLayout.Undefined,
+            Usage = usageFlags,
+            SharingMode = SharingMode.Exclusive,
+            Samples = SampleCountFlags.Count1Bit
+        };
+
+        VulkanHelper.Check(_context.Vk.CreateImage(_context.Device, in imageInfo, null, out _image),
+            "Failed to create Vulkan render target image.");
+
+        _context.Vk.GetImageMemoryRequirements(_context.Device, _image, out var memReqs);
+
+        MemoryAllocateInfo allocInfo = new()
+        {
+            SType = StructureType.MemoryAllocateInfo,
+            AllocationSize = memReqs.Size,
+            MemoryTypeIndex = _context.FindMemoryType(memReqs.MemoryTypeBits, MemoryPropertyFlags.DeviceLocalBit)
+        };
+
+        VulkanHelper.Check(_context.Vk.AllocateMemory(_context.Device, in allocInfo, null, out _memory),
+            "Failed to allocate Vulkan render target image memory.");
+
+        VulkanHelper.Check(_context.Vk.BindImageMemory(_context.Device, _image, _memory, 0),
+            "Failed to bind Vulkan render target image memory.");
+
+        CreateImageView(format, 1);
+
+        var sDesc = samplerDesc ?? SamplerDescription.LinearClamp;
+        _sampler = _bindlessManager.SamplerManager.GetOrCreateSampler(sDesc);
+        _textureId = _bindlessManager.RegisterTexture(_imageView, in sDesc);
+
+        var cmd = _context.BeginSingleTimeCommands();
+        ImageMemoryBarrier2 barrier = new()
+        {
+            SType = StructureType.ImageMemoryBarrier2,
+            SrcStageMask = PipelineStageFlags2.TopOfPipeBit,
+            SrcAccessMask = AccessFlags2.None,
+            DstStageMask = PipelineStageFlags2.FragmentShaderBit | PipelineStageFlags2.ComputeShaderBit,
+            DstAccessMask = AccessFlags2.ShaderReadBit,
+            OldLayout = ImageLayout.Undefined,
+            NewLayout = ImageLayout.ShaderReadOnlyOptimal,
+            Image = _image,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1)
+        };
+
+        DependencyInfo dep = new()
+        {
+            SType = StructureType.DependencyInfo,
+            ImageMemoryBarrierCount = 1,
+            PImageMemoryBarriers = &barrier
+        };
+
+        _context.Vk.CmdPipelineBarrier2(cmd, in dep);
+        _context.EndSingleTimeCommands(cmd);
+    }
+
+
+    /// <summary>
     /// Allocates optimal GPU device-local memory and creates the VkImage handle.
     /// </summary>
     private void CreateImage(int width, int height, Format format, uint mipLevels)
