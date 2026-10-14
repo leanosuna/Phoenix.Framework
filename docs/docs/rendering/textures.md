@@ -1,45 +1,86 @@
-# Textures
+# Textures and bindless
 
-Phoenix handles textures through `GLTexture` objects and are loaded the [Asset loading](../asset-pipeline/loading.md) system.
+Namespace: `Phoenix.Framework.Rendering.Vulkan`
 
-### Properties
+In Phoenix Framework v2, textures are represented by `VulkanTexture` and managed globally through `BindlessManager`. Instead of binding individual textures to texture units, shaders sample textures from a global descriptor array at Set 1.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `Name` | `string` | Texture identifier |
-| `Handle` | `uint` | OpenGL texture handle |
-| `Size` | `Vector2` | Base texture dimensions |
-| `WrapS` / `WrapT` | `int` | Wrap mode (S and T axes) |
-| `FilterMin` / `FilterMag` | `int` | Minification and magnification filters |
-| `Anisotropic` | `float` | Anisotropic filtering level |
-| `Format` | `byte` | Compression format: `0`=RGBA8, `1`=BC1, `2`=BC3, `3`=BC5 |
-| `InternalFormat` | `InternalFormat` | OpenGL internal format |
-| `MipCount` | `int` | Number of mipmaps |
-| `MipSizes` | `Vector2[]` | Size of each mipmap level |
-| `EncodedBytes` | `byte[][]` | Raw encoded bytes per mipmap level |
+---
 
-### Methods
+## The bindless texture model
 
-| Method | Description |
-|--------|-------------|
-| `Bind(TextureUnit slot = TextureUnit.Texture0)` | Bind the texture to a texture unit |
-| `Resize(Vector2 size)` | Resize the texture storage |
+`Graphics.BindlessManager` allocates a global descriptor array of `sampler2D` images:
 
-### GLTextureCube
+```
+Set 1, Binding 0: uniform sampler2D uTextures[4096];
+```
 
-Cubemap textures expose `Handle` (uint) and `Bind(TextureUnit slot = TextureUnit.Texture0)`. Loaded via `AssetLoader.LoadTextureCube(string[] names)` (6 faces).
+When a `VulkanTexture` loads:
+1. It uploads pixel data to a `VkImage` with optimal tiling.
+2. It registers with `BindlessManager`.
+3. It receives a unique 32-bit `TextureId` (0 to 4095).
+4. When disposed, its ID returns to a free list for reuse.
 
-## Supported compression Formats
+In your shaders, pass the texture ID through push constants:
 
-| Format | Internal | Bytes/pixel | Quality | Best For |
-|--------|----------|-------------|---------|----------|
-| RGBA8 | `GL.Rgba8` | 4 | Lossless | Small textures, UI |
-| BC1 (DXT1) | `GL.CompressedSrgbAlphaTextureS3TCDXT1` | 0.5 | Lossy | Albedo maps |
-| BC3 (DXT5) | `GL.CompressedSrgbAlphaTextureS3TCBC3` | 1 | Lossy | RGBA textures with alpha |
-| BC5 (RGTC2) | `GL.CompressedSignedRedGreenTextureS3TCBC5` | 1 | Lossless | Normal maps, height maps |
+```glsl
+layout(set = 1, binding = 0) uniform sampler2D uTextures[];
 
-## See Also
+void main() {
+    vec4 albedo = texture(uTextures[nonuniformEXT(uTextureId)], vTexCoords);
+}
+```
 
-- [AssetLoader](../asset-pipeline/loading.md) — resolves textures by name from manifest
-- [Render Targets](../core/graphics.md#render-target-operations) — creates dynamic textures
-- [UI & ImGui](ui.md) — draws textures in overlay
+This model eliminates per-texture descriptor set allocation and descriptor rebinding during scene rendering.
+
+---
+
+## Loading textures
+
+Load textures through `AssetLoader`:
+
+```csharp
+VulkanTexture diffuse = AssetLoader.LoadTexture("Textures/brick_diffuse.png");
+uint textureId = diffuse.TextureId;
+```
+
+`AssetLoader` automatically checks `.contentbin/` for pre-compressed `.dds` binaries. In production, pre-compressed files upload directly to the GPU without CPU transcoding.
+
+---
+
+## Supported compression formats
+
+Block-compressed formats reduce GPU memory usage and bandwidth:
+
+| Format | Vulkan format | Bytes/pixel | Best for |
+|---|---|---|---|
+| **RGBA8** | `R8G8B8A8_UNORM` | 4.0 | UI icons, dynamic canvas textures, text |
+| **BC1 (DXT1)** | `BC1_RGB_UNORM_BLOCK` | 0.5 | Opaque albedo and diffuse textures |
+| **BC3 (DXT5)** | `BC3_UNORM_BLOCK` | 1.0 | Albedo textures with alpha masks |
+| **BC5 (RGTC2)** | `BC5_UNORM_BLOCK` | 1.0 | Tangent-space normal maps and height maps |
+| **BC7 (BPTC)** | `BC7_UNORM_BLOCK` | 1.0 | High-quality PBR textures, roughness, and metalness |
+
+---
+
+## GPU mipmap generation
+
+For uncompressed textures without precomputed mipmaps, `VulkanTexture` can generate a complete mip chain on the GPU using blit operations and `VK_KHR_synchronization2` pipeline barriers:
+
+```csharp
+var texture = new VulkanTexture(Graphics.Context, imageWidth, imageHeight, format);
+texture.GenerateMipmaps();
+```
+
+---
+
+## Sampler caching (SamplerManager)
+
+`SamplerManager` caches immutable `VkSampler` handles for address modes and filters:
+
+| Filter mode | Address mode | Description |
+|---|---|---|
+| Linear | Repeat | Bilinear filtering with wrapping texture coordinates |
+| Linear | ClampToEdge | Bilinear filtering clamped to edge pixels (skyboxes, UI) |
+| Nearest | ClampToEdge | Point sampling for pixel art or G-buffer lookups |
+| Linear | MirroredRepeat | Bilinear filtering mirrored on border wrap |
+
+Each sampler can enable 16x anisotropic filtering to reduce blur on angled surfaces.

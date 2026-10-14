@@ -2,76 +2,90 @@
 
 Namespace: `Phoenix.Framework.Rendering.Primitives`
 
-Phoenix provides procedurally generated geometry primitives (cube, sphere, cylinder, plane, pyramid, frustum) for debug rendering, prototyping, and quick meshes. Each primitive is generated on the GPU at creation time and can be drawn with its own VAO, or queried for vertex/index data.
+Phoenix provides procedurally generated 3D geometry primitives (cube, sphere, cylinder, plane, pyramid, frustum) for prototyping, collision testing, and debug visualizations. Primitives generate GPU vertex and index buffers encapsulated in a `ModelMesh`.
+
+---
 
 ## API
 
+Every primitive derives from `Primitive` and provides:
+
 ```csharp
-public static void SetGL(GL gl)  // Required once before creating any primitive
+public void Draw(RenderContext rc)               // Binds vertex/index buffers and draws
+public T[] GetVertexData<T>() where T : unmanaged // Access raw vertex records
+public uint[] GetIndexData()                     // Access index buffer data
+public ModelMesh? Mesh { get; }                  // Underlying ModelMesh handle
 ```
 
-Every primitive (`Cube`, `Sphere`, `Cylinder`, `Plane`, `Pyramid`, `Frustum`) derives from `Primitive` and offers:
+The framework initializes primitive rendering automatically during `InternalLoad()`.
+
+---
+
+## Creating primitives
+
+Create primitives through their concrete static `Create` factories:
 
 ```csharp
-public void Draw()                              // Bind VAO + draw elements
-public T[] GetVertexData<T>() where T : unmanaged  // Download vertex data
-public uint[] GetIndexData()                    // Download index data
-```
-
-Each concrete primitive is created through static factories and exposes its info as a public field (`CubeInfo`, `SphereInfo`, `CylinderInfo`, `PlaneInfo`, `PyramidInfo`, `FrustumInfo`):
-
-```csharp
+// Default cube
 var cube = Cube.Create();
+
+// Sphere with custom subdivision count
 var sphere = Sphere.Create(new InfoSphere { SubDivisions = 32 });
+
+// Cylinder
+var cylinder = Cylinder.Create(new InfoCylinder { SubDivisions = 24 });
 ```
 
-## Info Classes
+---
 
-All info classes derive from `PrimitiveInfo`, which exposes toggles for generated attributes:
+## Configuration with PrimitiveInfo
 
-| Field | Type | Default |
-|-------|------|---------|
-| `MeshPrimitiveType` | `PrimitiveType` | `Triangles` |
-| `Uv` | `bool` | `false` |
-| `Normals` | `bool` | `false` |
-| `Tangents` | `bool` | `false` |
-| `Bitangents` | `bool` | `false` |
-| `SaveVertices` | `bool` | `false` |
+Info classes customize attribute generation:
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `Uv` | `bool` | `false` | Generates texture coordinates |
+| `Normals` | `bool` | `false` | Generates vertex normals |
+| `Tangents` | `bool` | `false` | Generates tangents for normal mapping |
+| `Bitangents` | `bool` | `false` | Generates bitangents |
+| `SaveVertices` | `bool` | `false` | Retains CPU copy of raw vertex bytes |
 
 Per-type fields:
 
-| Info Class | Fields (defaults) |
-|------------|-------------------|
-| `InfoCube` | — (inherits `PrimitiveInfo` only) |
-| `InfoSphere` | `SubDivisions` (16) |
-| `InfoCylinder` | `SubDivisions` (16) |
-| `InfoFrustum` | `NearWidth` (1.0), `NearHeight` (1.0), `FarWidth` (2.0), `FarHeight` (2.0), `Depth` (1.0) |
-| `InfoPlane` | — |
-| `InfoPyramid` | — |
+| Info class | Specific fields |
+|---|---|
+| `InfoCube` | None (inherits `PrimitiveInfo`) |
+| `InfoSphere` | `SubDivisions` (default 16) |
+| `InfoCylinder` | `SubDivisions` (default 16) |
+| `InfoFrustum` | `NearWidth`, `NearHeight`, `FarWidth`, `FarHeight`, `Depth` |
+| `InfoPlane` | None |
+| `InfoPyramid` | None |
+
+---
 
 ## Example
 
 ```csharp
-Primitive.SetGL(GL);   // once at startup
-
-// Simple cube
-var cube = Cube.Create();
-cube.Draw();
-
-// Sphere with higher tessellation and normals
-var sphere = Sphere.Create(new InfoSphere
+public class MyGame : PhoenixGame
 {
-    SubDivisions = 48,
-    Normals = true,
-    SaveVertices = true
-});
+    private Cube _cube = null!;
+    private VulkanPipeline _pipeline = null!;
 
-// Read back vertex data
-var verts = sphere.GetVertexData<VertexPosUvNorm>();  // your own vertex struct
+    protected override void Initialize()
+    {
+        _cube = Cube.Create(new InfoCube { Normals = true, Uv = true });
+        _pipeline = CreatePipeline();
+    }
+
+    protected override void Render(RenderContext ctx, double deltaTime)
+    {
+        using var pass = ctx.BeginPass(new Vector4(0.1f, 0.1f, 0.15f, 1.0f));
+
+        ctx.BindPipeline(_pipeline);
+        ctx.BindDefaultDescriptorSets(_pipeline);
+        ctx.PushConstants(_pipeline, new PushConstantsData { World = Matrix4x4.Identity });
+
+        _cube.Draw(ctx);
+    }
+}
 ```
-
-## See Also
-
-- [Gizmos](gizmos.md) — debug wireframe drawing (no vertex management needed)
-- [Graphics & Rendering](../core/graphics.md) — shaders to draw primitives with
-- [Models & Animation](models.md) — imported model meshes

@@ -1,4 +1,4 @@
-﻿using Silk.NET.Input;
+using Silk.NET.Input;
 using System.Numerics;
 
 namespace Phoenix.Framework.Inputs
@@ -26,7 +26,7 @@ namespace Phoenix.Framework.Inputs
 
             for (int i = 0; i < _mice.Count; i++)
             {
-                _mice[i].Cursor.CursorMode = CursorMode.Raw;
+                _mice[i].Cursor.CursorMode = CursorMode.Normal;
                 _mice[i].Scroll += OnMouseWheel;
             }
 
@@ -42,6 +42,11 @@ namespace Phoenix.Framework.Inputs
         }
 
         public IInputContext GetContext() { return _input; }
+
+        /// <summary>
+        /// Gets the current cursor mode of the primary mouse device.
+        /// </summary>
+        public CursorMode MouseMode => _mice.Count > 0 ? _mice[0].Cursor.CursorMode : CursorMode.Normal;
 
         public void SetMouseMode(CursorMode mode)
         {

@@ -5,7 +5,7 @@
 
 .vscode/
 .agents/
-
+docs/site/
 # dotenv files
 .env
 

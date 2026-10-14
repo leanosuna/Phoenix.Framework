@@ -1,4 +1,5 @@
 using Phoenix.Framework.Maths;
+using Silk.NET.Input;
 using System.Numerics;
 
 namespace Phoenix.Framework.Cameras;
@@ -28,10 +29,15 @@ public abstract class MouseCamera : BaseCamera
 
     /// <summary>
     /// Reads mouse delta and adjusts yaw and pitch angles accordingly.
+    /// In Normal cursor mode, aim requires holding the right mouse button.
     /// </summary>
     protected void CalculateMouseAim()
     {
         if (!MouseAim)
+            return;
+
+        bool isCaptured = _game.Input.MouseMode != CursorMode.Normal;
+        if (!isCaptured && !_game.Input.MouseRightDown())
             return;
 
         var mouseDelta = _game.Input.MouseDelta;

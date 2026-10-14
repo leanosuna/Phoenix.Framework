@@ -1,203 +1,169 @@
-# Models & Animation
+# Models and indirect rendering
 
-Phoenix loads 3D models from binary format (compiled from Assimp by [AssetTool](../asset-pipeline/asset-tool.md)). Supports static meshes and skeletal animation.
+Namespace: `Phoenix.Framework.Rendering.Geometry`
 
-## Loading Models
+Phoenix Framework v2 provides two paths for rendering 3D geometry: direct drawing via `Model` and batched drawing via Multi-Draw Indirect (`IndirectMeshBuilder` and `IndirectMeshRenderer`). Skinned character meshes animate through `AnimatedModel`.
+
+---
+
+## 3D models
+
+### Loading a model
+
+Load 3D models using `AssetLoader`:
 
 ```csharp
-// Load a static model
-var staticModel = AssetLoader.LoadModel("props/box");
-
-// Load an animated model
-var animatedModel = AssetLoader.LoadAnimatedModel("characters/walk");
+Model model = AssetLoader.LoadModel("3D/sponza.fbx");
 ```
 
-## Model Hierarchy
+`AssetLoader` automatically checks `.contentbin/` for pre-parsed `.pmdl` binaries. When found, models load directly into GPU vertex and index buffers without running Assimp.
+
+### Model hierarchy
 
 ```
 Model
- ├── Parts: List<ModelPart>
- │     └── Name: string
- │     └── Meshes: List<ModelMesh>
- │           └── Name: string
- │           └── Transform: Matrix4x4
- │           └── Draw()
- ├── TextureNames: List<string>
- └── HasTextures: bool
-
-AnimatedModel : Model
- ├── Animations: List<Animation>
- ├── AnimatorNodes: AnimatorNode[]
- ├── InverseGlobalTransform: Matrix4x4
- ├── BoneCount: int
- ├── FinalBoneMatrices: Matrix4x4[]
- ├── EnableBoneWorldTransforms: bool
- ├── SetAnimation(int index)
- ├── SetAnimationBlend(int index, float duration = 0.25f)
- └── Update(float deltaTime)
+ └── ModelMesh[]
+      └── ModelPart[]
+           ├── IndexOffset & IndexCount
+           ├── MaterialIndex & BoundingBox
+           └── VulkanBuffer (Vertex & Index)
 ```
 
-## Rendering a Static Model
+Vertices use `ModelVertex`:
+
+| Attribute | Type | Format | Description |
+|---|---|---|---|
+| `Position` | `Vector3` | `R32G32B32_SFLOAT` | 3D vertex position in local space |
+| `Normal` | `Vector3` | `R32G32B32_SFLOAT` | Surface normal vector |
+| `Tangent` | `Vector3` | `R32G32B32_SFLOAT` | Tangent vector for normal mapping |
+| `TexCoords` | `Vector2` | `R32G32_SFLOAT` | UV coordinates |
+| `Color` | `Vector4` | `R32G32B32A32_SFLOAT` | Vertex tint color |
+
+### Direct model drawing
+
+Draw models directly into `RenderContext`:
 
 ```csharp
-var model = (Model)AssetLoader.LoadModel("props/tree");
-
-foreach (var part in model.Parts)
+protected override void Render(RenderContext ctx, double deltaTime)
 {
-    foreach (var mesh in part.Meshes)
-    {
-        // Set your shader uniforms (model matrix, textures, etc.)
-        ShaderBasicModel.Use();
-        ShaderBasicModel.World.Set(mesh.Transform);
-        ShaderBasicModel.Albedo.Set(albedoTexture);
+    using var pass = ctx.BeginPass(new Vector4(0.1f, 0.1f, 0.15f, 1.0f));
 
-        // Draw the mesh
-        mesh.Draw();
-    }
+    ctx.BindPipeline(_pipeline);
+    ctx.BindDefaultDescriptorSets(_pipeline);
+    ctx.PushConstants(_pipeline, in _pushData);
+
+    _model.Draw(ctx, _pipeline);
 }
 ```
 
-## Rendering an Animated Model
+---
 
+## Multi-Draw Indirect (MDI)
+
+Direct drawing issues separate draw calls per submesh. For complex scenes or large object counts, Multi-Draw Indirect combines geometry into a single GPU dispatch.
+
+### 1. Packing meshes into an indirect batch
+
+Use `IndirectMeshBuilder` during `Initialize()`:
 
 ```csharp
-var model = (AnimatedModel)AssetLoader.LoadModel("characters/robot");
-model.SetAnimation(0);  // Select animation by index
+var builder = new IndirectMeshBuilder(Graphics.Context);
+
+// Add submeshes from multiple models
+builder.AddModel(buildingModel, buildingWorldMatrix, diffuseTextureId);
+builder.AddModel(treeModel, treeWorldMatrix, treeTextureId);
+
+IndirectDrawBatch batch = builder.Build();
+var renderer = new IndirectMeshRenderer(Graphics.Context, batch);
 ```
 
+The builder creates:
+- A unified vertex buffer.
+- A unified index buffer.
+- An indirect command buffer containing `DrawIndexedIndirectCommand` structs:
+  ```csharp
+  public struct DrawIndexedIndirectCommand
+  {
+      public uint IndexCount;
+      public uint InstanceCount;
+      public uint FirstIndex;
+      public int  VertexOffset;
+      public uint FirstInstance;
+  }
+  ```
+- A submesh metadata storage buffer (`VulkanStorageBuffer`) storing world matrices and material IDs for each submesh.
+
+### 2. Dispatches in RenderContext
+
+Execute all submesh draws with a single command:
 
 ```csharp
-protected override void Update(double dt)
+protected override void Render(RenderContext ctx, double deltaTime)
 {
-    model.Update((float)dt);  // Advance animation, compute bone transforms
-}
+    using var pass = ctx.BeginPass(new Vector4(0.05f, 0.05f, 0.08f, 1.0f));
 
-protected override void Render(double dt)
-{
-    foreach (var part in model.Parts)
-    {
-        foreach (var mesh in part.Meshes)
-        {
-            // Pass bone matrices to shader
-            ShaderAnimated.Use();
-            ShaderAnimated.BoneMatrices.Set(model.FinalBoneMatrices);
-            mesh.Draw();
-        }
-    }
+    ctx.BindPipeline(_mdiPipeline);
+    ctx.BindDefaultDescriptorSets(_mdiPipeline); // Sets 0 and 1
+    ctx.BindDescriptorSets(_mdiPipeline, new[] { _batch.MetadataDescriptorSet }, firstSet: 3);
+
+    _renderer.Draw(ctx);
 }
 ```
 
-## AnimatedModel Properties
+### 3. Reading submesh metadata in shaders
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `Animations` | `List<Animation>` | All animations in the model |
-| `AnimatorNodes` | `AnimatorNode[]` | Bone hierarchy nodes |
-| `InverseGlobalTransform` | `Matrix4x4` | Single inverse global transform (root offset) |
-| `BoneCount` | `int` | Number of bones |
-| `FinalBoneMatrices` | `Matrix4x4[]` | Final world-space bone matrices (updated by `Update`) |
-| `EnableBoneWorldTransforms` | `bool` | When `true`, computes world-space bone transforms (default `false`) |
-
-### Methods
-
-| Method | Description |
-|--------|-------------|
-| `SetAnimation(int index)` | Switch to the animation at `index` (resets to frame 0) |
-| `SetAnimationBlend(int index, float duration = 0.25f)` | Cross-fade to the animation over `duration` seconds |
-| `Update(float deltaTime)` | Advance current animation and compute bone matrices |
-| `GetBoneWorldTransforms()` | `ReadOnlySpan<BoneWorldTransform>` — world-space bone transforms, valid when `EnableBoneWorldTransforms` is true |
-
-`BoneWorldTransform` is a struct with `Position` (`Vector3`) and `Rotation` (`Quaternion`).
-
-## Animations
-
-Each `Animation` represents one animation clip (e.g., "Idle", "Walk", "Attack"). Animations are precalculated at load time; per-frame work is interpolation only.
-
-### Properties
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `Name` | `string` | Animation name |
-| `Duration` | `float` | Total duration in seconds |
-| `TicksPerSecond` | `float` | Keyframe ticks per second |
-
-Methods: `Reset()` (rewind to frame 0) and `Update(float deltaTime, Matrix4x4[] finalBoneMatrices)` (internal pipeline use).
-
-### Playing Animations
-
-```csharp
-model.SetAnimation(0);  // First animation (0-indexed)
-model.SetAnimation(1);  // Second animation
-
-// Cross-fade between animations
-model.SetAnimationBlend(2, duration: 0.5f);
-
-// Access animation properties
-var anim = model.Animations[0];
-Console.WriteLine($"Duration: {anim.Duration}s, Name: {anim.Name}");
-```
-
-### Keyframe Structure
-
-Each animation is built from per-bone keyframe arrays (internal pipeline data; `Keyframe` exposes `TimeStamp` and `Transform` publicly):
-
-```
-Animation (internal)
- └── _keyFrames: Keyframe[][]
-       └── Keyframe
-            ├── TimeStamp: float
-            ├── Transform: Transform
-            │    ├── Scale: Vector3
-            │    ├── Rotation: Quaternion
-            │    └── Translation: Vector3
-            └── Interpolate(other, factor) → Transform
-```
-
-`Transform` also provides `AsMatrix()` and `Interpolate(other, factor)`.
-
-## ModelMesh
-
-Each mesh within a model part. Contains vertex data (VAO) and index data.
-
-### Vertex Layout
-
-| Attribute | Type | Location |
-|-----------|------|----------|
-| `Position` | `Vector3` | 0 |
-| `Normal` | `Vector3` | 1 |
-| `TexCoord` | `Vector2` | 2 |
-| `Tangent` | `Vector3` | 3 |
-| `Bitangent` | `Vector3` | 4 |
-| `BoneIds` | `Vector4<int>` | 5 |
-| `Weights` | `Vector4<float>` | 6 |
-
-### Drawing
-
-```csharp
-mesh.Draw();  // GL.BindVertexArray + GL.DrawElements
-```
-
-## Bone Animation Details
-
-Bone transforms are computed in `AnimatedModel.Update(deltaTime)`:
-
-1. **Interpolate** keyframes for each bone based on elapsed time
-2. **Apply** local bone transforms (scale, rotation, translation)
-3. **Propagate** transforms down the bone hierarchy (parent × child)
-4. **Combine** with `InverseGlobalTransform` for final world-space matrices
-5. Store results in `FinalBoneMatrices[]` for the shader
-
-The shader applies skinning using the 4 bone IDs and weights per vertex:
+In your vertex shader, use `gl_DrawID` to fetch the transform and texture for each submesh:
 
 ```glsl
-// In vertex shader:
-for (int i = 0; i < 4; i++) {
-    skinPos += boneMatrices[int(boneIds[i])][i] * boneWeights[i];
+struct SubmeshData {
+    mat4 World;
+    uint TextureId;
+    uint NormalMapId;
+    uint SpecularMapId;
+    uint Padding;
+};
+
+layout(set = 3, binding = 0) readonly buffer SubmeshBuffer {
+    SubmeshData uSubmeshes[];
+};
+
+void main() {
+    SubmeshData submesh = uSubmeshes[gl_DrawID];
+    vTexCoords = aTexCoords;
+    vTextureId = submesh.TextureId;
+
+    gl_Position = uViewProjection * submesh.World * vec4(aPosition, 1.0);
 }
 ```
 
-## See Also
+---
 
-- [AssetLoader](../asset-pipeline/loading.md) — loading models by name
-- [AssetTool](../asset-pipeline/asset-tool.md) — compiling models to binary format
-- [Shaders](shaders.md) — passing bone matrices to shaders
+## Skeletal animation
+
+`AnimatedModel` loads rigged characters and evaluates skeleton poses:
+
+```csharp
+AnimatedModel character = AssetLoader.LoadAnimatedModel("3D/character.fbx");
+character.PlayAnimation("Walk", loop: true);
+```
+
+### Bone calculation and GPU skinning
+1. In `Update()`, `character.Update(deltaTime)` samples keyframe tracks and updates bone matrices.
+2. In `Render()`, bone transforms upload to a Set 2 uniform buffer.
+3. The vertex shader transforms vertices by bone weights:
+
+```glsl
+layout(set = 2, binding = 0) uniform BoneUBO {
+    mat4 uBones[128];
+};
+
+void main() {
+    mat4 boneTransform = uBones[aBoneIds.x] * aBoneWeights.x +
+                         uBones[aBoneIds.y] * aBoneWeights.y +
+                         uBones[aBoneIds.z] * aBoneWeights.z +
+                         uBones[aBoneIds.w] * aBoneWeights.w;
+
+    vec4 worldPos = uWorld * boneTransform * vec4(aPosition, 1.0);
+    gl_Position = uViewProjection * worldPos;
+}
+```

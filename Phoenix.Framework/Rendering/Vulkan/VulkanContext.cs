@@ -352,9 +352,15 @@ public sealed unsafe class VulkanContext : IDisposable
     /// </summary>
     private bool CheckDeviceFeatureSupport(PhysicalDevice device)
     {
+        PhysicalDeviceVulkan11Features features11 = new()
+        {
+            SType = StructureType.PhysicalDeviceVulkan11Features
+        };
+
         PhysicalDeviceVulkan12Features features12 = new()
         {
-            SType = StructureType.PhysicalDeviceVulkan12Features
+            SType = StructureType.PhysicalDeviceVulkan12Features,
+            PNext = &features11
         };
 
         PhysicalDeviceVulkan13Features features13 = new()
@@ -372,6 +378,8 @@ public sealed unsafe class VulkanContext : IDisposable
         _vk.GetPhysicalDeviceFeatures2(device, &features2);
         return features2.Features.SamplerAnisotropy &&
                features2.Features.TextureCompressionBC &&
+               features2.Features.MultiDrawIndirect &&
+               features11.ShaderDrawParameters &&
                features13.DynamicRendering &&
                features13.Synchronization2 &&
                features12.DescriptorBindingPartiallyBound &&
@@ -411,9 +419,16 @@ public sealed unsafe class VulkanContext : IDisposable
         if (availableExtensions.Contains("VK_KHR_portability_subset"))
             enabledExtensions.Add("VK_KHR_portability_subset");
 
+        PhysicalDeviceVulkan11Features features11 = new()
+        {
+            SType = StructureType.PhysicalDeviceVulkan11Features,
+            ShaderDrawParameters = true
+        };
+
         PhysicalDeviceVulkan12Features features12 = new()
         {
             SType = StructureType.PhysicalDeviceVulkan12Features,
+            PNext = &features11,
             DescriptorBindingPartiallyBound = true,
             RuntimeDescriptorArray = true,
             DescriptorBindingSampledImageUpdateAfterBind = true,
@@ -432,7 +447,8 @@ public sealed unsafe class VulkanContext : IDisposable
         PhysicalDeviceFeatures features10 = new()
         {
             SamplerAnisotropy = true,
-            TextureCompressionBC = true
+            TextureCompressionBC = true,
+            MultiDrawIndirect = true
         };
 
         PhysicalDeviceFeatures2 features2 = new()

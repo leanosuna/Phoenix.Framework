@@ -1,209 +1,115 @@
-# Graphics & Rendering
+# Graphics and rendering
 
 Namespace: `Phoenix.Framework.Rendering`
 
-The `Graphics` class manages OpenGL state, render targets, and the rendering pipeline. Exposed as `PhoenixGame.Graphics`.
+The `Graphics` class manages Vulkan devices, swapchain presentation, uniform buffer pools, bindless descriptors, and command recording. Exposed as `PhoenixGame.Graphics`.
 
-## Properties
+---
 
-| Name | Type | Description |
+## Core properties
+
+| Property | Type | Description |
 |---|---|---|
-| `RenderHaltKey` | `Key` | Key that toggles render halt (default `F11`) |
-| `RenderViewport` | `RenderViewport` | Viewport scale control for render targets |
-| `DepthTest` | `(bool Enabled, GLEnum Function)` | Current depth test state |
-| `AlphaBlend` | `(bool Enabled, BlendingFactor Source, BlendingFactor Destination)` | Current blend state |
-| `FaceCulling` | `(bool Enabled, GLEnum Face, bool FrontIsCcw)` | Current face culling state |
-| `PolygonModeState` | `(TriangleFace Face, PolygonMode Mode)` | Current polygon rasterization mode |
-| `DepthWrite` | `bool` | Whether depth buffer writes are enabled |
-| `ColorWrite` | `(bool R, bool G, bool B, bool A)` | Per-channel color write mask |
-| `StencilWriteMask` | `uint` | Stencil buffer write mask |
+| `Context` | `VulkanContext` | Vulkan instance, physical device, logical device, and graphics/present queue families |
+| `Swapchain` | `VulkanSwapchain` | Double-buffered swapchain, depth-stencil buffer, and image presentation synchronization |
+| `RenderContext` | `RenderContext` | Active command recording context for dynamic passes, pipeline binding, and draw dispatches |
+| `Bindless` / `BindlessManager` | `BindlessManager` | Global texture descriptor array (Set 1) indexing up to 4096 or 16384 sampled images |
+| `CommonUbo` | `CommonUBOManager` | Manages per-frame camera matrices and timing uniforms (Set 0) |
+| `Viewport` | `RenderViewport` | Viewport scaling controller for decoupling render resolution from window size |
+| `SceneRenderTarget` | `VulkanRenderTarget` | Offscreen scene color and depth target used when viewport scaling is active |
+| `ClearColor` | `Vector4` | Default clear color for rendering passes |
+| `RenderHaltKey` | `Key` | Keyboard key used to toggle render halt (default `F11`) |
+| `RenderHalt` | `bool` | Current render halt state |
 
-## Metrics
+---
 
-Performance counters are grouped in the `Metrics` property.
+## Vulkan context and swapchain
 
-| Name | Type | Description |
-|---|---|---|
-| `Time` | `double` | Total elapsed time in seconds |
-| `FrameTime` | `double` | Render frame delta time |
-| `FT_SAMPLE` | `int` | Smoothed frame time sample (ms) |
-| `FT_SAMPLE_RATE` | `double` | Frame time sample rate (default `0.25`) |
-| `FPS` | `double` | Instantaneous frames per second |
-| `FPS_SAMPLE` | `int` | Smoothed FPS sample |
-| `FPS_SAMPLE_RATE` | `double` | FPS sample rate (default `0.25`) |
-| `UPS` | `double` | Instantaneous updates per second |
-| `UPS_SAMPLE` | `int` | Smoothed updates per second sample |
-| `UPS_SAMPLE_RATE` | `double` | Update sample rate (default `0.25`) |
+### VulkanContext
+`Graphics.Context` selects discrete GPUs by default and activates required Vulkan 1.3 features:
+- Dynamic rendering (`VK_KHR_dynamic_rendering`).
+- Synchronization2 (`VK_KHR_synchronization2`).
+- Descriptor indexing with partially bound descriptor arrays.
+- Multi-Draw Indirect (`multiDrawIndirect` and `drawParameters`).
 
+### VulkanSwapchain
+`Graphics.Swapchain` manages two frames in flight:
+- **Presentation modes**: Supports `Fifo` (VSync locked), `Mailbox` (triple-buffering without tearing), and `Immediate` (uncapped with tearing).
+- **Double-buffered synchronization**: Each frame has dedicated command buffers, image-available semaphores, render-finished semaphores, and CPU execution fences.
+- **Dynamic recreation**: When the window is resized or minimized, `Swapchain.Recreate()` rebuilds color image views and depth-stencil attachments without device destruction.
 
-## Methods
+---
 
-### Window
+## RenderContext and dynamic passes
 
-| Method | Description |
-|---|---|
-| `SetFullscreen(bool value)` | Toggle fullscreen mode |
-| `SetMaximized()` | Maximize the window |
-| `SetWindowed(Vector2 size, bool border = true)` | Set window size, optionally windowed border |
-| `SetWindowed(Vector2 size, Vector2 position, bool border = true)` | Set window size and position |
-| `SetWindowBorder(WindowBorder type)` | Change window border style |
-
-### GL State
-
-All state methods are **idempotent** — they track the current value and skip redundant GL calls.
+In Phoenix v2, all rendering commands are recorded through `RenderContext`.
 
 ```csharp
-// Depth testing
-Graphics.SetDepthTest(true);
-Graphics.SetDepthTest(true, GLEnum.Less);
-
-// Alpha blending
-Graphics.SetAlphaBlend(true);
-Graphics.SetAlphaBlend(true, BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-
-// Face culling
-Graphics.SetFaceCulling(true);
-Graphics.SetFaceCulling(true, GLEnum.Back, frontIsCcw: true);
-
-// Polygon mode
-Graphics.SetPolygonMode(TriangleFace.FrontAndBack, PolygonMode.Line);
-
-// Depth write
-Graphics.SetDepthWrite(true);
-
-// Color write mask
-Graphics.SetColorWrite(true, true, true, false);  // disable alpha write
-
-// Stencil mask
-Graphics.SetStencilWriteMask(0xFF);
-```
-
-### Clearing
-
-```csharp
-Graphics.SetClearColor(new Vector4(0.1f, 0.15f, 0.2f, 1f));
-Graphics.SetClearColor(Color.Black);       // System.Drawing.Color overload
-Graphics.ClearRenderTarget();              // color + depth + stencil
-Graphics.ClearRenderTarget(true, true, false);  // color + depth only
-Graphics.ClearRenderTarget(ClearBufferMask.ColorBufferBit);  // mask overload
-```
-
-### Render Target Operations
-
-| Method | Description |
-|---|---|
-| `SetRenderToTarget(RenderTarget target)` | Redirect rendering to an off-screen render target |
-| `SetRenderToScreen()` | Return rendering to the default scene render target |
-| `BuildRenderTarget()` | `RTBuilder` fluent API to create a new render target |
-| `BuildTargetTexture()` | `RTTBuilder` fluent API to create a texture attachment |
-| `NewRenderTarget()` | Create a simple default render target (1 color + depth) |
-| `TryFindByName(string name, out RenderTarget target)` | Look up a render target by name |
-| `CopyToScreen(RenderTarget rt, int srcRTindex, Vector4 srcRect, Vector4 destRect, BlitFramebufferFilter filter = Nearest)` | Copy render target color buffer to screen |
-| `CopyTo((target, RTindex, Rect) src, (target, RTindex, Rect) dest, BlitFramebufferFilter filter = Nearest)` | Copy color buffer between render targets |
-
-### Creating Render Targets
-
-```csharp
-// Simple render target with default 1-texture + depth
-var rt = Graphics.BuildRenderTarget()
-    .AddTexture()
-    .AddDepthBuffer()
-    .Build();
-
-var rt = Graphics.NewRenderTarget();  // shortcut for the above
-
-// Custom render target with named texture and specific settings
-var rt = Graphics.BuildRenderTarget()
-    .SetName("post-process-rt")
-    .AddTexture(Graphics.BuildTargetTexture()
-        .SetFormat(InternalFormat.Rgba8)
-        .SetWrapS(GLEnum.ClampToEdge)
-        .SetWrapT(GLEnum.ClampToEdge)
-        .SetMinFilter(GLEnum.Linear)
-        .SetMagFilter(GLEnum.Linear)
-        .SetStatic(new Vector2(1024, 1024)))
-    .SetDepthBuffer(new DepthBuffer(new Vector2(1024, 1024), GLEnum.Depth24Stencil8))
-    .Build();
-
-// Dynamic size (follows window scaling)
-var rt = Graphics.BuildRenderTarget()
-    .SetName("half-res-rt")
-    .AddTexture(Graphics.BuildTargetTexture()
-        .SetResolutionMultiplier(new Vector2(0.5f, 0.5f)))
-    .AddDepthBuffer()
-    .Build();
-```
-
-### Depth Buffer
-
-```csharp
-new DepthBuffer()                                   // Window-sized, Depth24Stencil8
-new DepthBuffer(GLEnum.Depth24Stencil8)             // Window-sized, custom format
-new DepthBuffer(new Vector2(1024, 1024))            // Fixed size, Depth24Stencil8
-new DepthBuffer(new Vector2(1024, 1024), GLEnum.Depth24Stencil8)  // Fixed size + format
-```
-
-### Using Render Targets
-
-```csharp
-Graphics.SetRenderToTarget(rt);
-// ... draw to rt ...
-
-Graphics.SetRenderToScreen();  // back to the internal _sceneRT
-```
-
-### Finding Render Targets
-
-```csharp
-if (Graphics.TryFindByName("post-process-rt", out var target))
+protected override void Render(RenderContext ctx, double deltaTime)
 {
-    // Use target
+    // Begin a scoped dynamic pass
+    using (var pass = ctx.BeginPass(new Vector4(0.1f, 0.12f, 0.16f, 1.0f)))
+    {
+        ctx.BindPipeline(_pipeline);
+        ctx.BindDefaultDescriptorSets(_pipeline);
+        ctx.PushConstants(_pipeline, in _pushConstants);
+
+        ctx.BindVertexBuffer(_vertexBuffer);
+        ctx.BindIndexBuffer(_indexBuffer);
+        ctx.DrawIndexed(_indexCount);
+    }
 }
 ```
 
-### Copying Between Targets
+### Dynamic pass methods
+
+- `BeginPass(Vector4 clearColor, float clearDepth = 1.0f)`: Starts dynamic rendering on the scaled scene target if viewport scaling is enabled, or directly on the swapchain backbuffer. Returns a `ScopedPass` struct that invokes `EndPass()` when disposed.
+- `BeginPass(VulkanRenderTarget target, Vector4 clearColor, float clearDepth = 1.0f)`: Directs dynamic rendering to an offscreen render target.
+- `BeginSwapchainPass(Vector4 clearColor, float clearDepth = 1.0f)`: Explicitly begins rendering directly to the swapchain image.
+- `EndPass()`: Closes `vkCmdEndRendering` and transitions attachment layouts.
+
+### Pipeline and resource binding
+
+- `BindPipeline(VulkanPipeline pipeline)`: Binds graphics pipeline and sets dynamic viewport and scissor rects.
+- `BindDefaultDescriptorSets(VulkanPipeline pipeline)`: Binds Set 0 (`CommonUBO`) and Set 1 (`Bindless`).
+- `BindDescriptorSets(VulkanPipeline pipeline, DescriptorSet[] sets, uint firstSet = 0)`: Binds custom descriptor sets.
+- `PushConstants(VulkanPipeline pipeline, in PushConstantsData data)`: Writes 80-byte push constants directly to GPU command registers.
+- `BindVertexBuffer(VulkanBuffer buffer, ulong offset = 0)`: Binds vertex attributes.
+- `BindIndexBuffer(VulkanBuffer buffer, IndexType indexType = IndexType.Uint32, ulong offset = 0)`: Binds index buffer.
+
+### Drawing commands
+
+- `Draw(uint vertexCount, uint instanceCount = 1, uint firstVertex = 0, uint firstInstance = 0)`: Non-indexed draw.
+- `DrawIndexed(uint indexCount, uint instanceCount = 1, uint firstIndex = 0, int vertexOffset = 0, uint firstInstance = 0)`: Indexed draw.
+- `DrawIndexedIndirect(VulkanBuffer buffer, ulong offset, uint drawCount, uint stride)`: Dispatches multi-mesh indirect draw batches.
+- `Dispatch(uint groupCountX, uint groupCountY, uint groupCountZ)`: Dispatches compute pipelines.
+- `BlitToSwapchain(VulkanRenderTarget target, Filter filter = Filter.Linear)`: Scales and copies an offscreen target to the swapchain backbuffer.
+
+---
+
+## RenderViewport scaling
+
+`Graphics.Viewport` allows running the 3D scene at a lower internal resolution for performance while maintaining native resolution for ImGui overlays:
 
 ```csharp
-// Copy RT color buffer to screen
-Graphics.CopyToScreen(rt, 0,
-    new Vector4(0, 0, rt.Width, rt.Height),
-    new Vector4(0, 0, 1920, 1080));
-
-// Copy between two render targets
-Graphics.CopyTo(
-    (sourceRT, 0, new Vector4(0, 0, 512, 512)),
-    (destRT,   0, new Vector4(0, 0, 512, 512)));
+// Render scene at 720p and upscale with linear filtering to a 1080p window
+Graphics.Viewport.Enabled = true;
+Graphics.Viewport.SetVirtualResolution(1280, 720);
+Graphics.Viewport.Filter = Silk.NET.Vulkan.Filter.Linear;
 ```
 
-## FullScreenQuad
+When enabled:
+1. `ctx.BeginPass()` renders to `Graphics.SceneRenderTarget`.
+2. At the end of 3D rendering, the framework blits `SceneRenderTarget` to the swapchain backbuffer.
+3. `RenderUI()` draws ImGui overlays directly on the backbuffer at native pixel resolution.
 
-A single quad from -1 to 1 with UV coordinates 0→1. Used for post-processing:
+---
+
+## Synchronization and GPU idle
+
+Call `Graphics.WaitIdle()` to flush the entire GPU queue before destroying or recreating heavy resources:
 
 ```csharp
-Graphics.FullScreenQuad.Draw();
-```
-
-## CommonUBO
-
-A Uniform Buffer Object at binding point 0 updated every frame with camera and timing data:
-
-```glsl
-layout(std140) uniform CommonData {
-    mat4 sView;
-    mat4 sProjection;
-    float sTime;
-    float sDeltaTime;
-};
-```
-
-```csharp
-shader.AttachUBO(Game.CommonUboHandle, "CommonData", binding: 0);
-```
-
-## RenderViewport
-
-Controls the scale of render targets relative to the window:
-
-```csharp
-Graphics.RenderViewport.Scale = new Vector2(0.5f, 0.5f);  // Half resolution
+Graphics.WaitIdle();
+_meshBuffer.Dispose();
 ```

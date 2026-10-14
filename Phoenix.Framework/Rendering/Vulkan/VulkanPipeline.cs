@@ -13,6 +13,7 @@ public sealed unsafe class VulkanPipeline : IDisposable
     public Pipeline Pipeline => _pipeline;
     public PipelineLayout Layout => _layout;
     public PipelineBindPoint BindPoint => PipelineBindPoint.Graphics;
+    public uint DescriptorSetCount { get; private set; }
 
     /// <summary>
     /// Compiles shader modules and builds a Vulkan graphics pipeline with dynamic rendering and configurable pipeline state.
@@ -30,6 +31,8 @@ public sealed unsafe class VulkanPipeline : IDisposable
     /// </summary>
     private void CreatePipelineLayout(VulkanPipelineDescription desc)
     {
+        DescriptorSetCount = (uint)desc.DescriptorSetLayouts.Length;
+
         PushConstantRange pushRange = new()
         {
             StageFlags = ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit,

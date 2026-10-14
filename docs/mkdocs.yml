@@ -64,14 +64,16 @@ nav:
       - Camera: core/camera.md
       - Input: core/input.md
   - Rendering:
-      - Shaders: rendering/shaders.md
-      - Textures: rendering/textures.md
-      - Models & Animation: rendering/models.md
+      - Shaders & Pipelines: rendering/shaders.md
+      - Textures & Bindless: rendering/textures.md
+      - Models & Indirect Rendering: rendering/models.md
+      - Render Targets: rendering/render-targets.md
       - Primitives: rendering/primitives.md
       - UI & ImGui: rendering/ui.md
       - Gizmos: rendering/gizmos.md
-  - Collision System:
+  - Collision & Physics:
       - Overview: collisions/overview.md
+      - Physics World: collisions/physics.md
       - Ray Casting: collisions/ray.md
       - Ray Casts: collisions/raycasts.md
       - Bounding Spheres: collisions/spheres.md
@@ -84,7 +86,7 @@ nav:
       - Asset Tool: asset-pipeline/asset-tool.md
   - Utilities:
       - Math Helpers: math/math.md
-      - Logging: utilities/logging.md
+      - Logging & Metrics: utilities/logging.md
 
 extra_css:
 - stylesheets/extra.css

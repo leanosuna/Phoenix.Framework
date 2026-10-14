@@ -44,6 +44,11 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
     public int ColorAttachmentCount => _colorTextures.Length;
 
     /// <summary>
+    /// Gets the primary color texture format.
+    /// </summary>
+    public Format ColorFormat => _colorFormats[0];
+
+    /// <summary>
     /// Gets the primary color texture (attachment 0).
     /// </summary>
     public VulkanTexture ColorTexture => _colorTextures[0];

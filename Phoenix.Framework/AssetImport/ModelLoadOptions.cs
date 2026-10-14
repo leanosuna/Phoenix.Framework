@@ -47,6 +47,7 @@ public sealed class ModelLoadOptions
     public bool IsAnimated { get; set; } = false;
     public bool Tangents { get; set; } = true;
     public bool PreTransform { get; set; } = false;
+    public bool CenterXZ { get; set; } = false;
     public float Scale { get; set; } = 1.0f;
     public List<string> AnimationFiles { get; set; } = [];
 
@@ -57,6 +58,7 @@ public sealed class ModelLoadOptions
         IsAnimated = IsAnimated,
         Tangents = Tangents,
         PreTransform = PreTransform,
+        CenterXZ = CenterXZ,
         Scale = Scale,
         AnimationFiles = [.. AnimationFiles],
         AssimpFlags = [.. AssimpFlags]

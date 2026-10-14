@@ -72,6 +72,60 @@ public static class AssetLoader
         }
     }
 
+    /// <summary>
+    /// Invalidates cached models matching the specified path and reloads the model if it was previously cached.
+    /// </summary>
+    public static Model? InvalidateAndReloadModel(string path)
+    {
+        EnsureInitialized();
+        string resolved = ResolvePath(path);
+        string name = Path.GetFileNameWithoutExtension(resolved);
+
+        lock (_loadedModels)
+        {
+            var keysToRemove = _loadedModels.Keys.Where(k => k.Contains(name, StringComparison.OrdinalIgnoreCase)).ToList();
+            bool wasLoaded = keysToRemove.Count > 0;
+            foreach (var k in keysToRemove)
+            {
+                _loadedModels[k].Dispose();
+                _loadedModels.Remove(k);
+            }
+
+            if (wasLoaded && File.Exists(resolved))
+            {
+                return LoadModel(resolved);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Invalidates cached textures matching the specified path and reloads the texture if it was previously cached.
+    /// </summary>
+    public static VulkanTexture? InvalidateAndReloadTexture(string path)
+    {
+        EnsureInitialized();
+        string resolved = ResolvePath(path);
+        string name = Path.GetFileNameWithoutExtension(resolved);
+
+        lock (_loadedTextures)
+        {
+            var keysToRemove = _loadedTextures.Keys.Where(k => k.Contains(name, StringComparison.OrdinalIgnoreCase)).ToList();
+            bool wasLoaded = keysToRemove.Count > 0;
+            foreach (var k in keysToRemove)
+            {
+                _loadedTextures[k].Dispose();
+                _loadedTextures.Remove(k);
+            }
+
+            if (wasLoaded && File.Exists(resolved))
+            {
+                return LoadTexture(resolved);
+            }
+        }
+        return null;
+    }
+
 
     private static void EnsureInitialized()
     {
@@ -167,12 +221,16 @@ public static class AssetLoader
             {
                 if (_loadedTextures.TryGetValue(cacheKey, out var cached))
                 {
-                    if (preallocatedSlot.HasValue)
+                    if (!cached.IsDisposed)
                     {
-                        _graphics!.BindlessManager.UpdateDescriptor(preallocatedSlot.Value, cached.ImageView, cached.Sampler);
+                        if (preallocatedSlot.HasValue)
+                        {
+                            _graphics!.BindlessManager.UpdateDescriptor(preallocatedSlot.Value, cached.ImageView, cached.Sampler);
+                        }
+                        op.Complete($"Loaded {cached.Format} (Memory cache)");
+                        return cached;
                     }
-                    op.Complete($"Loaded {cached.Format} (Memory cache)");
-                    return cached;
+                    _loadedTextures.Remove(cacheKey);
                 }
             }
 
@@ -360,6 +418,18 @@ public static class AssetLoader
     }
 
     /// <summary>
+    /// Loads or processes a 3D model returning its raw metadata, geometry, and mesh hierarchies as a ModelInfo.
+    /// </summary>
+    public static Phoenix.AssetTool.Core.Metadata.ModelInfo LoadModelInfo(string path, Phoenix.AssetTool.Core.Configuration.ModelLoadOptions? options = null)
+    {
+        string resolved = ResolvePath(path);
+        if (!File.Exists(resolved))
+            throw new FileNotFoundException($"Model file not found: {resolved}", resolved);
+
+        return Phoenix.AssetTool.Core.Processing.ModelProcessor.Process(resolved, options);
+    }
+
+    /// <summary>
     /// Loads a static 3D model with automated runtime Assimp compilation, options resolution, and binary disk caching.
     /// </summary>
     public static Model LoadModel(string path, ModelLoadOptions? options = null)
@@ -376,7 +446,11 @@ public static class AssetLoader
         lock (_loadedModels)
         {
             if (_loadedModels.TryGetValue(cacheKey, out var existing))
-                return existing;
+            {
+                if (!existing.IsDisposed)
+                    return existing;
+                _loadedModels.Remove(cacheKey);
+            }
         }
 
         string sanitizedName = Path.GetFileNameWithoutExtension(resolved);
@@ -441,7 +515,11 @@ public static class AssetLoader
         lock (_loadedModels)
         {
             if (_loadedModels.TryGetValue(cacheKey, out var existing))
-                return existing;
+            {
+                if (!existing.IsDisposed)
+                    return existing;
+                _loadedModels.Remove(cacheKey);
+            }
         }
 
         string sanitizedName = Path.GetFileNameWithoutExtension(resolved);
@@ -600,6 +678,7 @@ public static class AssetLoader
         sb.Append(options.IsAnimated);
         sb.Append(options.Tangents);
         sb.Append(options.PreTransform);
+        sb.Append(options.CenterXZ);
         sb.Append(options.Scale);
         if (options.AssimpFlags != null)
         {
@@ -666,21 +745,56 @@ public static class AssetLoader
             }
             else
             {
-                string relCandidate = Path.Combine(modelDir, texName);
+                string cleanTex = texName.Replace('\\', '/');
+                string fileName = Path.GetFileName(cleanTex);
+                string baseName = Path.GetFileNameWithoutExtension(cleanTex);
+
+                string relCandidate = Path.Combine(modelDir, cleanTex);
                 if (File.Exists(relCandidate))
                 {
                     resolvedTexPath = Path.GetFullPath(relCandidate);
                 }
-                else if (File.Exists(texName))
+                else if (File.Exists(cleanTex))
                 {
-                    resolvedTexPath = Path.GetFullPath(texName);
+                    resolvedTexPath = Path.GetFullPath(cleanTex);
+                }
+                else if (File.Exists(Path.Combine(modelDir, fileName)))
+                {
+                    resolvedTexPath = Path.GetFullPath(Path.Combine(modelDir, fileName));
                 }
                 else
                 {
-                    string resolvedLoader = ResolvePath(texName);
+                    string resolvedLoader = ResolvePath(cleanTex);
                     if (File.Exists(resolvedLoader))
                     {
                         resolvedTexPath = resolvedLoader;
+                    }
+                    else if (Directory.Exists(modelDir))
+                    {
+                        try
+                        {
+                            var matches = Directory.GetFiles(modelDir, fileName, SearchOption.AllDirectories);
+                            if (matches.Length > 0)
+                            {
+                                resolvedTexPath = Path.GetFullPath(matches[0]);
+                            }
+                            else
+                            {
+                                string[] exts = [".png", ".jpg", ".jpeg", ".tga", ".bmp", ".dds"];
+                                foreach (var ext in exts)
+                                {
+                                    matches = Directory.GetFiles(modelDir, baseName + ext, SearchOption.AllDirectories);
+                                    if (matches.Length > 0)
+                                    {
+                                        resolvedTexPath = Path.GetFullPath(matches[0]);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        catch
+                        {
+                        }
                     }
                 }
             }

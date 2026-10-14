@@ -143,4 +143,20 @@ internal static class PrimitiveHelper
             Normals = true
         });
     }
+
+    internal static void DisposeAll()
+    {
+        foreach (var p in _primitivesCube.Values) p.Dispose();
+        _primitivesCube.Clear();
+        foreach (var p in _primitivesSphere.Values) p.Dispose();
+        _primitivesSphere.Clear();
+        foreach (var p in _primitivesPlane.Values) p.Dispose();
+        _primitivesPlane.Clear();
+        foreach (var p in _primitivesCylinder.Values) p.Dispose();
+        _primitivesCylinder.Clear();
+        foreach (var p in _primitivesPyramid.Values) p.Dispose();
+        _primitivesPyramid.Clear();
+        foreach (var p in _primitivesFrustum.Values) p.Dispose();
+        _primitivesFrustum.Clear();
+    }
 }

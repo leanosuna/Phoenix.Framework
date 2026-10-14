@@ -1,8 +1,12 @@
 # Camera
 
-Phoenix provides a hierarchy of camera classes for viewport control. Cameras feed `View` and `Projection` matrices into the `CommonUBO` every frame.
+Namespace: `Phoenix.Framework.Cameras`
 
-## Camera Hierarchy
+Phoenix provides a hierarchy of camera classes for 3D viewport control. Cameras feed `View` and `Projection` matrices into `CommonUBO` (Set 0) every frame.
+
+---
+
+## Camera hierarchy
 
 ```
 Camera (abstract)
@@ -12,156 +16,138 @@ Camera (abstract)
 ```
 
 | Class | Purpose |
-|-------|---------|
-| `Camera` | Base class defining `View` and `Projection` |
-| `BaseCamera` | Shared state: position, yaw, pitch, FOV, aspect ratio |
-| `MouseCamera` | Adds mouse delta input for yaw/pitch control |
-| `FreeCamera` | WASD-style movement + mouse look |
+|---|---|
+| `Camera` | Base class defining `View`, `Projection`, and `Position` |
+| `BaseCamera` | Shared state: position, yaw, pitch, FOV, near/far planes, aspect ratio |
+| `MouseCamera` | Adds mouse delta input for yaw and pitch look controls |
+| `FreeCamera` | Concrete camera supporting WASD keyboard movement and mouse aim |
+
+---
 
 ## FreeCamera
 
-The main camera class. Supports keyboard movement and mouse look.
+`FreeCamera` is the standard first-person camera. It supports keyboard translation and mouse look.
 
 ### Creating a FreeCamera
 
 ```csharp
 Camera = new FreeCamera(
-    this,                           // PhoenixGame reference
-    new Vector3(0, 5, -10),         // Position
-    0,                              // Yaw (radians)
-    -MathF.PI / 4,                  // Pitch (radians)
-    MathF.PI / 4,                   // FOV (radians)
-    0.1f,                           // Near plane
-    1000f,                          // Far plane
-    WindowWidth / (float)WindowHeight  // Aspect ratio
+    game: this,                           // PhoenixGame reference
+    position: new Vector3(0, 5, -10),     // Starting position
+    yaw: 0,                               // Yaw (radians)
+    pitch: -MathF.PI / 4,                 // Pitch (radians)
+    fov: MathF.PI / 4,                    // FOV (radians)
+    nearPlane: 0.1f,                      // Near clipping plane
+    farPlane: 1000f,                      // Far clipping plane
+    aspectRatio: WindowWidth / (float)WindowHeight
 );
 ```
 
-### Movement Keys
+### Movement keys
 
 ```csharp
-// WASD + QE (up/down) + Shift (sprint)
 camera.SetMoveKeys(
-    Key.W,    // Forward
-    Key.S,    // Backward
-    Key.A,    // Left
-    Key.D,    // Right
-    Key.E,    // Up
-    Key.Q,    // Down
-    Key.LeftShift,  // Speed multiplier key
-    moveSpeedMultiplier: 2f   // Sprint multiplier
+    Key.W,          // Forward
+    Key.S,          // Backward
+    Key.A,          // Left
+    Key.D,          // Right
+    Key.E,          // Up
+    Key.Q,          // Down
+    Key.LeftShift,  // Sprint key
+    moveSpeedMultiplier: 2f
 );
 
-camera.MoveSpeed = 15f;  // Base movement speed
+camera.MoveSpeed = 15f;  // Base speed in units per second
 ```
 
-### Mouse Look
+### Mouse look
 
-Mouse look is enabled by default (`MouseAim = true`). Mouse delta is automatically applied to yaw and pitch each frame.
+Mouse look is active by default (`MouseAim = true`). Mouse deltas are automatically converted to yaw and pitch rotations each frame.
 
 ```csharp
-Input.MouseSensitivity = 0.002f;  // Override default (0.001f)
+Input.MouseSensitivity = 0.002f;  // Default is 0.001f
 ```
 
-`MouseSensitivity` lives on `Input` (see [Input](input.md)), not on the camera.
+### Updating the camera
 
-### Manual Yaw/Pitch Keys
-
-For keyboards without mouse, you can set arrow keys for yaw/pitch:
+Call `Update()` each frame in your game `Update()` method:
 
 ```csharp
-camera.SetPitchYawKeys(
-    Key.Up,    // Increase pitch
-    Key.Down,  // Decrease pitch
-    Key.Left,  // Decrease yaw
-    Key.Right, // Increase yaw
-    new Vector2(2f, 2f)  // Speed multipliers [pitch, yaw]
-);
-```
-
-### Updating the Camera
-
-Call `Update()` every frame in your `Update()` method:
-
-```csharp
-protected override void Update(double dt)
+protected override void Update(double deltaTime)
 {
-    Camera.Update(dt);
+    ((FreeCamera)Camera!).Update(deltaTime);
 }
 ```
 
-This processes:
-- Mouse delta → yaw/pitch rotation
-- Keyboard input → position translation
-- Recalculates `View` matrix (LookAt)
-- Recalculates `Projection` matrix (perspective)
+This method:
+1. Translates position based on pressed movement keys.
+2. Rotates yaw and pitch using mouse movement.
+3. Recalculates the view matrix using `Matrix4x4.CreateLookAt`.
+4. Recalculates the projection matrix using `Matrix4x4.CreatePerspectiveFieldOfView`.
 
-## Camera Properties
+---
+
+## Camera properties
 
 | Property | Type | Description |
-|----------|------|-------------|
-| `Position` | `Vector3` | Camera position |
-| `Front` | `Vector3` | Forward direction (normalized) |
-| `Up` | `Vector3` | Up vector (normalized) |
-| `Right` | `Vector3` | Right vector (normalized) |
-| `Yaw` | `float` | Horizontal rotation (radians) |
-| `Pitch` | `float` | Vertical rotation (radians) |
-| `FOV` | `float` | Field of view (radians) |
-| `AspectRatio` | `float` | Width / Height |
-| `NearPlane` | `float` | Near clipping plane |
-| `FarPlane` | `float` | Far clipping plane |
-| `View` | `Matrix4x4` | View matrix (set each frame) |
-| `Projection` | `Matrix4x4` | Projection matrix (set each frame) |
-| `MoveSpeed` | `float` | Movement speed (default 10) |
-| `MouseAim` | `bool` | Whether to process mouse delta (default true) |
+|---|---|---|
+| `Position` | `Vector3` | Camera position in world space |
+| `Front` | `Vector3` | Forward direction vector (normalized) |
+| `Up` | `Vector3` | Up direction vector (normalized) |
+| `Right` | `Vector3` | Right direction vector (normalized) |
+| `Yaw` | `float` | Horizontal rotation angle in radians |
+| `Pitch` | `float` | Vertical rotation angle in radians |
+| `FOV` | `float` | Field of view in radians |
+| `AspectRatio` | `float` | Framebuffer aspect ratio (width / height) |
+| `NearPlane` | `float` | Near clipping plane distance |
+| `FarPlane` | `float` | Far clipping plane distance |
+| `View` | `Matrix4x4` | View transformation matrix |
+| `Projection` | `Matrix4x4` | Perspective projection matrix |
+| `MoveSpeed` | `float` | Base movement units per second (default 10) |
+| `MouseAim` | `bool` | Whether mouse deltas rotate the camera |
 
-## Camera Usage
+---
 
-The camera's `View` and `Projection` matrices are automatically fed into the `CommonUBO` every frame. Shaders that need camera data bind this UBO:
+## Integration with CommonUBO
 
-```csharp
-// In your shader:
-layout(std140) uniform CommonData
-{
-    mat4 sView;
-    mat4 sProjection;
-    float sTime;
-    float sDeltaTime;
+The camera view and projection matrices are uploaded to Set 0 (`CommonUBO`) automatically before each frame render. In your GLSL shaders:
+
+```glsl
+layout(set = 0, binding = 0) uniform CommonUBO {
+    mat4 uView;
+    mat4 uProjection;
+    mat4 uViewProjection;
+    mat4 uInverseView;
+    mat4 uInverseProjection;
+    vec4 uCameraPosition;
+    vec2 uResolution;
+    float uTime;
+    float uDeltaTime;
 };
-
-// gl_Position = sProjection * sView * World * vPosition;
 ```
 
-## Custom Camera
+---
 
-For custom camera behavior, inherit from `BaseCamera`:
+## Custom cameras
+
+To build a custom camera (such as an orbit or third-person camera), inherit from `BaseCamera`:
 
 ```csharp
 public class OrbitCamera : BaseCamera
 {
-    public float Distance;
+    public float Distance = 10f;
 
-    public OrbitCamera(Vector3 position, Vector3 target, float distance,
-        float yaw, float pitch, float fov, float nearPlane, float farPlane,
-        float aspectRatio)
+    public OrbitCamera(Vector3 position, float yaw, float pitch, float fov,
+        float nearPlane, float farPlane, float aspectRatio)
         : base(position, yaw, pitch, fov, nearPlane, farPlane, aspectRatio)
     {
-        Distance = distance;
     }
 
     public override void Update(double deltaTime)
     {
-        // Custom orbit logic
         CalculateVectors();
         CalculateView();
         CalculateProjection();
     }
 }
 ```
-
-`BaseCamera` takes position/yaw/pitch/fov/planes/aspect — only `MouseCamera` and its subclasses take a `PhoenixGame` reference (for input access).
-
-## See Also
-
-- [Gizmos](../rendering/gizmos.md) — gizmos use `Camera.View` and `Camera.Projection`
-- [BoundingFrustum](../collisions/frustum-box.md) — frustum is built from `Camera.View * Camera.Projection`

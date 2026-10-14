@@ -1,6 +1,7 @@
 using Phoenix.Framework.Rendering.Vulkan;
 using Silk.NET.Vulkan;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace Phoenix.Framework.Rendering;
 
@@ -792,12 +793,20 @@ public sealed unsafe class RenderContext
     {
         _context.Vk.CmdBindPipeline(_commandBuffer, pipeline.BindPoint, pipeline.Pipeline);
 
-        DescriptorSet* sets = stackalloc DescriptorSet[]
+        if (pipeline.DescriptorSetCount >= 2)
         {
-            _commonUbo.GetDescriptorSet(_currentFrame),
-            _bindlessManager.DescriptorSet
-        };
-        _context.Vk.CmdBindDescriptorSets(_commandBuffer, pipeline.BindPoint, pipeline.Layout, 0, 2, sets, 0, null);
+            DescriptorSet* sets = stackalloc DescriptorSet[]
+            {
+                _commonUbo.GetDescriptorSet(_currentFrame),
+                _bindlessManager.DescriptorSet
+            };
+            _context.Vk.CmdBindDescriptorSets(_commandBuffer, pipeline.BindPoint, pipeline.Layout, 0, 2, sets, 0, null);
+        }
+        else if (pipeline.DescriptorSetCount == 1)
+        {
+            var uboSet = _commonUbo.GetDescriptorSet(_currentFrame);
+            _context.Vk.CmdBindDescriptorSets(_commandBuffer, pipeline.BindPoint, pipeline.Layout, 0, 1, &uboSet, 0, null);
+        }
     }
 
     /// <summary>
@@ -915,11 +924,19 @@ public sealed unsafe class RenderContext
         _context.Vk.CmdPipelineBarrier2(_commandBuffer, in depInfo);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void EnsurePassActive()
+    {
+        if (!_passActive)
+            throw new InvalidOperationException("Cannot issue draw commands outside an active render pass. Call BeginPass() or BeginSwapchainPass() first.");
+    }
+
     /// <summary>
     /// Issues an indirect indexed draw call sourced from a GPU storage buffer.
     /// </summary>
     public void DrawIndexedIndirect(VulkanStorageBuffer buffer, ulong offset = 0, uint drawCount = 1, uint stride = 20)
     {
+        EnsurePassActive();
         _context.Vk.CmdDrawIndexedIndirect(_commandBuffer, buffer.Buffer, offset, drawCount, stride);
     }
 
@@ -928,6 +945,7 @@ public sealed unsafe class RenderContext
     /// </summary>
     public void DrawIndirect(VulkanStorageBuffer buffer, ulong offset = 0, uint drawCount = 1, uint stride = 16)
     {
+        EnsurePassActive();
         _context.Vk.CmdDrawIndirect(_commandBuffer, buffer.Buffer, offset, drawCount, stride);
     }
 
@@ -953,6 +971,7 @@ public sealed unsafe class RenderContext
     /// </summary>
     public void DrawIndexed(uint indexCount, uint instanceCount = 1, uint firstIndex = 0, int vertexOffset = 0, uint firstInstance = 0)
     {
+        EnsurePassActive();
         _context.Vk.CmdDrawIndexed(_commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
@@ -961,6 +980,7 @@ public sealed unsafe class RenderContext
     /// </summary>
     public void Draw(uint vertexCount, uint instanceCount = 1, uint firstVertex = 0, uint firstInstance = 0)
     {
+        EnsurePassActive();
         _context.Vk.CmdDraw(_commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
     }
 

@@ -100,6 +100,36 @@ public sealed unsafe class VulkanBuffer : IDisposable
     }
 
     /// <summary>
+    /// Copies elements from the mapped host-visible buffer into the destination span.
+    /// </summary>
+    public void GetData<T>(Span<T> destination, ulong offset = 0) where T : unmanaged
+    {
+        ulong byteCount = (ulong)(destination.Length * sizeof(T));
+        if (offset + byteCount > _size)
+            throw new ArgumentOutOfRangeException(nameof(destination), "Data size exceeds buffer capacity.");
+
+        if (_mappedData == null)
+            throw new InvalidOperationException("Buffer is not host-visible or mapped.");
+
+        if ((_memoryProperties & MemoryPropertyFlags.HostCoherentBit) == 0)
+        {
+            MappedMemoryRange range = new()
+            {
+                SType = StructureType.MappedMemoryRange,
+                Memory = _memory,
+                Offset = offset,
+                Size = byteCount
+            };
+            _context.Vk.InvalidateMappedMemoryRanges(_context.Device, 1, in range);
+        }
+
+        fixed (T* pDest = destination)
+        {
+            System.Buffer.MemoryCopy((byte*)_mappedData + offset, pDest, byteCount, byteCount);
+        }
+    }
+
+    /// <summary>
     /// Unmaps buffer memory, destroys the buffer handle, and frees allocated device memory.
     /// </summary>
     public void Dispose()

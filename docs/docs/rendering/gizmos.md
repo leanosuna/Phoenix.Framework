@@ -1,207 +1,121 @@
 # Gizmos
 
-Gizmos provide debug visualization for geometry, collisions, and spatial data. They render as colored wireframes on top of the scene.
+Namespace: `Phoenix.Framework.Rendering.Gizmos`
 
-## Access
+Gizmos provide immediate-mode debug visualization for 3D geometry, collision hulls, rays, and spatial orientations. They render as colored wireframes during the frame rendering sequence.
 
-```csharp
-var gizmos = Gizmos;  // Read-only from PhoenixGame
-```
+---
 
-## Enabling/Disabling
+## Access and control
+
+Access the gizmo system through `PhoenixGame.Gizmos`:
 
 ```csharp
 Gizmos.Enabled = true;   // Default: true
-Gizmos.Enabled = false;  // Skips Update() and Render() when false
+Gizmos.Enabled = false;  // Skips update and draw commands when false
 ```
 
-When disabled, gizmo drawing is completely skipped each frame.
+When enabled, gizmo line commands queue during `Update()` or `Render()`, and draw automatically before user UI passes.
 
-## Drawing Primitives
+---
 
-### Lines
+## Drawing primitives
+
+### Lines and rays
 
 ```csharp
-// Draw a line from origin to destination
-Gizmos.AddLine(
-    Vector3.Zero,           // origin
-    new Vector3(0, 5, 0),   // destination
-    new Vector3(1, 1, 1)    // color (RGB, 0-1)
-);
+// Line between two world points
+Gizmos.AddLine(new Vector3(0, 0, 0), new Vector3(0, 5, 0), new Vector3(1, 1, 1));
 
-// Red line (hit indicator)
-Gizmos.AddLine(Vector3.Zero, new Vector3(10, 0, 0), new Vector3(1, 0, 0), hit: true);
+// Ray with hit indicator
+Gizmos.AddLine(origin, target, new Vector3(1, 0, 0), hit: true);
 ```
 
-### Cubes
+### Cubes and boxes
 
 ```csharp
 // Axis-aligned cube
-Gizmos.AddCube(
-    Vector3.Zero,           // center position
-    new Vector3(2, 2, 2),   // size (width, height, depth)
-    new Vector3(0, 1, 0)    // color
-);
+Gizmos.AddCube(center: Vector3.Zero, size: new Vector3(2, 2, 2), color: new Vector3(0, 1, 0));
 
-// Oriented cube (from a transform matrix)
+// Oriented box from a world matrix
 Gizmos.AddCube(worldMatrix, new Vector3(1, 1, 0));
 ```
 
 ### Spheres
 
 ```csharp
-// Bounding sphere visualization
-Gizmos.AddSphere(
-    new Vector3(0, 1, 0),   // center
-    2.5f,                   // radius
-    new Vector3(0, 0, 1)    // color
-);
+// Center and radius
+Gizmos.AddSphere(center: new Vector3(0, 1, 0), radius: 2.5f, color: new Vector3(0, 0, 1));
 
-// From a matrix (e.g., object transform)
-Gizmos.AddSphere(enemy.Transform, new Vector3(1, 1, 0));
+// Oriented sphere from transform
+Gizmos.AddSphere(entityTransform, new Vector3(0, 1, 1));
 ```
 
-### Cylinders
+### Capsules and cylinders
 
 ```csharp
-// Cylinder with explicit parameters
-Gizmos.AddCylinder(
-    Vector3.Zero,           // base position
-    1.0f,                   // radius
-    3.0f,                   // height
-    Quaternion.Identity,    // rotation
-    new Vector3(1, 0.5f, 0) // color
-);
+// Capsule between two endpoints
+Gizmos.AddCapsule(pointA, pointB, radius: 0.5f, color: new Vector3(0, 1, 1));
 
-// From matrix (oriented cylinder)
-Gizmos.AddCylinder(tree.Transform, new Vector3(0, 1, 1));
+// Cylinder with height and radius
+Gizmos.AddCylinder(basePosition, radius: 1f, height: 3f, Quaternion.Identity, color: new Vector3(1, 0.5f, 0));
 ```
 
-### Planes
+### Collision volumes
+
+Draw any geometric collision volume directly:
 
 ```csharp
-// Axis-aligned plane (facing up)
-Gizmos.AddPlane(
-    Vector3.Zero,           // position
-    Vector3.UnitY,          // normal
-    new Vector2(5, 5),      // size (x, z extent)
-    new Vector3(1, 1, 0)    // color
-);
-
-// From matrix (oriented plane)
-Gizmos.AddPlane(ground.Transform, new Vector3(1, 1, 0));
-```
-
-### Collision Volumes
-
-Any collision volume can be drawn using the generic method:
-
-```csharp
-// Sphere
-Gizmos.AddVolume(sphere, new Vector3(0, 1, 0));
-
-// AABB
+Gizmos.AddVolume(boundingSphere, new Vector3(0, 1, 0));
 Gizmos.AddVolume(aabb, new Vector3(1, 0, 0));
-
-// OBB
 Gizmos.AddVolume(obb, new Vector3(0, 0, 1));
-
-// Cylinder
-Gizmos.AddVolume(cylinder, new Vector3(1, 1, 0));
-
-// Frustum (camera view volume)
-Gizmos.AddVolume(frustum, new Vector3(1, 0.5f, 0.5f));
+Gizmos.AddVolume(boundingFrustum, new Vector3(1, 0.5f, 0.5f));
 ```
 
-### Capsules
+### Coordinate frames
+
+Draw XYZ axis lines to visualize local orientation:
 
 ```csharp
-// Capsule from two endpoint positions
-Gizmos.AddCapsule(
-    new Vector3(0, 0, 0),   // point A
-    new Vector3(0, 2, 0),   // point B
-    0.5f,                   // radius
-    new Vector3(0, 1, 1)    // color
-);
+Gizmos.AddCoordinateFrame(worldMatrix, axisLength: 2f);
+Gizmos.AddAxisLines(length: 5f);
 ```
 
-### Axis Lines
+---
 
-Draw coordinate axes at the origin:
+## Color system
+
+Colors are RGB vectors with values between 0.0 and 1.0:
 
 ```csharp
-Gizmos.AddAxisLines(5);  // Length 5 units
+new Vector3(1, 0, 0); // Red
+new Vector3(0, 1, 0); // Green
+new Vector3(0, 0, 1); // Blue
+new Vector3(1, 1, 0); // Yellow
+new Vector3(1, 1, 1); // White
 ```
 
-## Color System
+Passing `hit: true` inverts the color, useful for collision hit confirmation.
 
-Colors use RGB values (0–1 range):
+---
 
-```csharp
-new Vector3(1, 0, 0)  // Red
-new Vector3(0, 1, 0)  // Green
-new Vector3(0, 0, 1)  // Blue
-new Vector3(1, 1, 0)  // Yellow
-new Vector3(1, 0, 1)  // Magenta
-new Vector3(0, 1, 1)  // Cyan
-new Vector3(1, 1, 1)  // White
-new Vector3(0.5f, 0.5f, 0.5f)  // Gray
-```
-
-The `hit` parameter inverts colors (used for collision visualization):
+## Example
 
 ```csharp
-// Normal (green) → Hit (red)
-Gizmos.AddVolume(sphere, new Vector3(0, 1, 0), hit: true);
-```
-
-## Gizmo Geometries
-
-| Type | Internal Class | Vertices | Lines |
-|------|---------------|----------|-------|
-| Line | `GGLineSegment` | 2 | 1 |
-| Cube | `GGCube` | 8 | 12 |
-| Sphere | `GGSphere` | 64×3 circles | 192 edges |
-| Cylinder | `GGCylinder` | 64×3 circles + 4 vertical | 196 edges |
-| Plane | `GGPlane` | 4 | 5 (rectangle + diagonal) |
-| Capsule | — | — | — |
-
-## Complete Example
-
-```csharp
-protected override void Render(double dt)
+protected override void Render(RenderContext ctx, double deltaTime)
 {
-    // Draw the scene
-    RenderScene();
+    using var pass = ctx.BeginPass(new Vector4(0.05f, 0.05f, 0.08f, 1f));
 
-    // Debug: draw camera frustum
-    var frustum = new BoundingFrustum(Camera.View * Camera.Projection);
+    // Draw main scene geometry
+    _sceneModel.Draw(ctx, _pipeline);
+
+    // Queue debug visualizations
+    var frustum = new BoundingFrustum(Camera!.View * Camera.Projection);
     Gizmos.AddVolume(frustum, new Vector3(1, 0.5f, 0.5f));
 
-    // Debug: draw all enemy collision spheres
-    foreach (var enemy in enemies)
+    foreach (var enemy in _enemies)
     {
-        Gizmos.AddVolume(enemy.CollisionSphere, new Vector3(1, 0, 0));
-    }
-
-    // Debug: draw ray to closest enemy
-    var closest = GetClosestEnemy();
-    if (closest != null)
-    {
-        Gizmos.AddLine(Camera.Position, closest.Position, new Vector3(0, 1, 0));
-    }
-
-    // Debug: draw grid on ground
-    for (int x = -10; x <= 10; x++)
-    {
-        Gizmos.AddLine(new Vector3(x, 0, -10), new Vector3(x, 0, 10), new Vector3(0.3f, 0.3f, 0.3f));
-        Gizmos.AddLine(new Vector3(-10, 0, x), new Vector3(10, 0, x), new Vector3(0.3f, 0.3f, 0.3f));
+        Gizmos.AddVolume(enemy.BoundingSphere, new Vector3(1, 0, 0));
     }
 }
 ```
-
-## See Also
-
-- [Collision System](../collisions/overview.md) — collision volumes that can be drawn
-- [Camera](../core/camera.md) — frustum built from camera matrices
-- [Logging](../utilities/logging.md) — ErrorListWindow for shader/runtime errors

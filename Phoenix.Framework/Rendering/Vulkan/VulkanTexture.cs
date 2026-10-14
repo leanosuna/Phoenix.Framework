@@ -1,6 +1,7 @@
 using Phoenix.Framework.AssetImport;
 using Phoenix.Framework.AssetImport.Processing;
 using Silk.NET.Vulkan;
+using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using VkImage = Silk.NET.Vulkan.Image;
@@ -27,6 +28,7 @@ public sealed unsafe class VulkanTexture : IDisposable
     private readonly Sampler _sampler;
     private bool _disposed;
 
+    public bool IsDisposed => _disposed;
     public VkImage Image => _image;
     public DeviceMemory Memory => _memory;
     public ImageView ImageView => _imageView;
@@ -597,6 +599,93 @@ public sealed unsafe class VulkanTexture : IDisposable
         }
 
         image.Mutate(x => x.Resize(targetW, targetH));
+    }
+
+    /// <summary>
+    /// Downloads pixel data from GPU memory and saves the texture to an image file on disk.
+    /// </summary>
+    public void SaveToFile(string filePath, ImageLayout currentLayout = ImageLayout.ShaderReadOnlyOptimal)
+    {
+        ulong bufferSize = (ulong)(_width * _height * 4);
+        using var stagingBuffer = new VulkanBuffer(_context, bufferSize,
+            BufferUsageFlags.TransferDstBit,
+            MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+
+        var cmd = _context.BeginSingleTimeCommands();
+
+        ImageMemoryBarrier2 toTransferSrc = new()
+        {
+            SType = StructureType.ImageMemoryBarrier2,
+            SrcStageMask = PipelineStageFlags2.AllCommandsBit,
+            SrcAccessMask = AccessFlags2.MemoryReadBit | AccessFlags2.MemoryWriteBit,
+            DstStageMask = PipelineStageFlags2.TransferBit,
+            DstAccessMask = AccessFlags2.TransferReadBit,
+            OldLayout = currentLayout,
+            NewLayout = ImageLayout.TransferSrcOptimal,
+            Image = _image,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1)
+        };
+
+        DependencyInfo depToSrc = new()
+        {
+            SType = StructureType.DependencyInfo,
+            ImageMemoryBarrierCount = 1,
+            PImageMemoryBarriers = &toTransferSrc
+        };
+        _context.Vk.CmdPipelineBarrier2(cmd, in depToSrc);
+
+        BufferImageCopy region = new()
+        {
+            BufferOffset = 0,
+            BufferRowLength = 0,
+            BufferImageHeight = 0,
+            ImageSubresource = new ImageSubresourceLayers(ImageAspectFlags.ColorBit, 0, 0, 1),
+            ImageOffset = new Offset3D(0, 0, 0),
+            ImageExtent = new Extent3D(_width, _height, 1)
+        };
+        _context.Vk.CmdCopyImageToBuffer(cmd, _image, ImageLayout.TransferSrcOptimal, stagingBuffer.Buffer, 1, in region);
+
+        ImageMemoryBarrier2 toOriginal = new()
+        {
+            SType = StructureType.ImageMemoryBarrier2,
+            SrcStageMask = PipelineStageFlags2.TransferBit,
+            SrcAccessMask = AccessFlags2.TransferReadBit,
+            DstStageMask = PipelineStageFlags2.AllCommandsBit,
+            DstAccessMask = AccessFlags2.MemoryReadBit | AccessFlags2.MemoryWriteBit,
+            OldLayout = ImageLayout.TransferSrcOptimal,
+            NewLayout = currentLayout,
+            Image = _image,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1)
+        };
+
+        DependencyInfo depToOrig = new()
+        {
+            SType = StructureType.DependencyInfo,
+            ImageMemoryBarrierCount = 1,
+            PImageMemoryBarriers = &toOriginal
+        };
+        _context.Vk.CmdPipelineBarrier2(cmd, in depToOrig);
+
+        _context.EndSingleTimeCommands(cmd);
+
+        var dir = Path.GetDirectoryName(Path.GetFullPath(filePath));
+        if (!string.IsNullOrEmpty(dir))
+            Directory.CreateDirectory(dir);
+
+        byte[] pixelBytes = new byte[bufferSize];
+        stagingBuffer.GetData<byte>(pixelBytes);
+
+        bool isBgra = _format is Format.B8G8R8A8Unorm or Format.B8G8R8A8Srgb;
+        if (isBgra)
+        {
+            using var img = SixLabors.ImageSharp.Image.LoadPixelData<Bgra32>(pixelBytes, (int)_width, (int)_height);
+            img.SaveAsPng(filePath);
+        }
+        else
+        {
+            using var img = SixLabors.ImageSharp.Image.LoadPixelData<Rgba32>(pixelBytes, (int)_width, (int)_height);
+            img.SaveAsPng(filePath);
+        }
     }
 
     /// <summary>

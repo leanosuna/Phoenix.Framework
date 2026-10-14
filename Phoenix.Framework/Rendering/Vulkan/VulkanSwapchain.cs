@@ -95,6 +95,12 @@ public sealed unsafe class VulkanSwapchain : IDisposable
         if (capabilities.MaxImageCount > 0 && imageCount > capabilities.MaxImageCount)
             imageCount = capabilities.MaxImageCount;
 
+        var usage = ImageUsageFlags.ColorAttachmentBit | ImageUsageFlags.TransferDstBit;
+        if (capabilities.SupportedUsageFlags.HasFlag(ImageUsageFlags.TransferSrcBit))
+        {
+            usage |= ImageUsageFlags.TransferSrcBit;
+        }
+
         SwapchainCreateInfoKHR createInfo = new()
         {
             SType = StructureType.SwapchainCreateInfoKhr,
@@ -104,7 +110,7 @@ public sealed unsafe class VulkanSwapchain : IDisposable
             ImageColorSpace = _colorSpace,
             ImageExtent = _extent,
             ImageArrayLayers = 1,
-            ImageUsage = ImageUsageFlags.ColorAttachmentBit | ImageUsageFlags.TransferDstBit,
+            ImageUsage = usage,
             PreTransform = capabilities.CurrentTransform,
             CompositeAlpha = CompositeAlphaFlagsKHR.OpaqueBitKhr,
             PresentMode = _presentMode,

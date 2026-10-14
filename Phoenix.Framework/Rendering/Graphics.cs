@@ -38,6 +38,11 @@ public sealed class Graphics : IDisposable
     public BindlessManager BindlessManager { get; private set; } = default!;
 
     /// <summary>
+    /// Convenient alias for BindlessManager.
+    /// </summary>
+    public BindlessManager Bindless => BindlessManager;
+
+    /// <summary>
     /// Gets the active rendering command recording context.
     /// </summary>
     public RenderContext RenderContext { get; private set; } = default!;
@@ -61,6 +66,11 @@ public sealed class Graphics : IDisposable
     /// Gets the descriptor set layout for skeletal animation bone uniform buffers (Set 2).
     /// </summary>
     public DescriptorSetLayout BoneLayout { get; private set; }
+
+    /// <summary>
+    /// Gets the descriptor set layout for multi-draw indirect submesh metadata storage buffers (Set 2).
+    /// </summary>
+    public DescriptorSetLayout IndirectMetadataLayout { get; private set; }
 
     /// <summary>
     /// Gets or sets the default background clear color for dynamic render passes.
@@ -111,6 +121,7 @@ public sealed class Graphics : IDisposable
         CommonUbo = new CommonUBOManager(Context);
         BindlessManager = new BindlessManager(Context);
         BoneLayout = CreateBoneLayout();
+        IndirectMetadataLayout = CreateStorageBufferLayout(ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 0);
         Viewport = new RenderViewport(game);
         SceneRenderTarget = CreateRenderTarget(Viewport.Width, Viewport.Height, Swapchain.ImageFormat, true, Swapchain.DepthFormat);
         RenderContext = new RenderContext(this);
@@ -425,6 +436,19 @@ public sealed class Graphics : IDisposable
     }
 
     /// <summary>
+    /// Captures the current rendered scene or presented frame to a PNG image file on disk.
+    /// </summary>
+    public void TakeScreenshot(string filePath, bool fromSceneTarget = true)
+    {
+        WaitIdle();
+
+        if (SceneRenderTarget != null)
+        {
+            SceneRenderTarget.ColorTexture.SaveToFile(filePath, ImageLayout.ShaderReadOnlyOptimal);
+        }
+    }
+
+    /// <summary>
     /// Disposes bindless manager, bone layout, uniform buffers, swapchain, and Vulkan device context.
     /// </summary>
     public void Dispose()
@@ -439,6 +463,15 @@ public sealed class Graphics : IDisposable
                 Context.Vk.DestroyDescriptorSetLayout(Context.Device, BoneLayout, null);
             }
             BoneLayout = default;
+        }
+
+        if (IndirectMetadataLayout.Handle != 0)
+        {
+            unsafe
+            {
+                Context.Vk.DestroyDescriptorSetLayout(Context.Device, IndirectMetadataLayout, null);
+            }
+            IndirectMetadataLayout = default;
         }
 
         SceneRenderTarget?.Dispose();

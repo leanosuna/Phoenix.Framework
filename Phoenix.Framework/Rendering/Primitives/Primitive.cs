@@ -29,6 +29,15 @@ public abstract class Primitive : IDisposable
     }
 
     /// <summary>
+    /// Releases cached GPU resources held by static primitive caches.
+    /// </summary>
+    public static void Shutdown()
+    {
+        PrimitiveHelper.DisposeAll();
+        _graphics = null;
+    }
+
+    /// <summary>
     /// Gets the allocated ModelMesh handle if GPU resources were created.
     /// </summary>
     public ModelMesh? Mesh => _mesh;

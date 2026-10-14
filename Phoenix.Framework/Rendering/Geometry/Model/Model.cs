@@ -13,6 +13,7 @@ public class Model : IDisposable
     private int _loadedTexturesCount;
     private bool _disposed;
 
+    public bool IsDisposed => _disposed;
     public List<ModelPart> Parts { get; internal set; } = [];
     public List<string> TextureNames { get; internal set; } = [];
     public List<VulkanTexture> Textures { get; internal set; } = [];

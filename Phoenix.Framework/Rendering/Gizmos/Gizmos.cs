@@ -196,6 +196,46 @@ public sealed class Gizmos : IDisposable
         }
     }
 
+    public void DrawCircle(Vector3 center, float radius, Vector4 color, bool hit = false, int segments = 32)
+    {
+        if (!Enabled || radius <= 0f)
+            return;
+
+        float step = MathF.Tau / segments;
+        for (int i = 0; i < segments; i++)
+        {
+            float a0 = i * step;
+            float a1 = (i + 1) * step;
+            Vector3 p0 = center + new Vector3(MathF.Cos(a0) * radius, 0f, MathF.Sin(a0) * radius);
+            Vector3 p1 = center + new Vector3(MathF.Cos(a1) * radius, 0f, MathF.Sin(a1) * radius);
+            DrawLine(p0, p1, color, hit);
+        }
+    }
+
+    public void DrawCircle(Vector3 center, float radius, Vector3 normal, Vector4 color, bool hit = false, int segments = 32)
+    {
+        if (!Enabled || radius <= 0f)
+            return;
+
+        if (normal == Vector3.Zero)
+            normal = Vector3.UnitY;
+
+        normal = Vector3.Normalize(normal);
+        Vector3 worldUp = MathF.Abs(normal.Y) < 0.99f ? Vector3.UnitY : Vector3.UnitX;
+        Vector3 right = Vector3.Normalize(Vector3.Cross(worldUp, normal));
+        Vector3 forward = Vector3.Normalize(Vector3.Cross(normal, right));
+
+        float step = MathF.Tau / segments;
+        for (int i = 0; i < segments; i++)
+        {
+            float a0 = i * step;
+            float a1 = (i + 1) * step;
+            Vector3 p0 = center + (right * MathF.Cos(a0) + forward * MathF.Sin(a0)) * radius;
+            Vector3 p1 = center + (right * MathF.Cos(a1) + forward * MathF.Sin(a1)) * radius;
+            DrawLine(p0, p1, color, hit);
+        }
+    }
+
     public void DrawSphere(BoundingSphere sphere, Vector4 color, bool hit = false)
     {
         DrawSphere(sphere.Position, sphere.Radius, color, hit);
@@ -410,6 +450,32 @@ public sealed class Gizmos : IDisposable
     public void AddLine(Vector3 origin, Vector3 destination, Vector3 color, bool hit = false) => DrawLine(origin, destination, ToV4(color), hit);
     public void AddRay(Vector3 origin, Vector3 direction, float length, Vector3 color, bool hit = false) => DrawRay(origin, direction, length, ToV4(color), hit);
     public void AddAxisLines(int length) => DrawAxisLines(Vector3.Zero, length);
+
+    public void DrawAxes(Matrix4x4 world, float length = 1.0f)
+    {
+        Vector3 pos = world.Translation;
+        Vector3 right = Vector3.Normalize(new Vector3(world.M11, world.M12, world.M13)) * length;
+        Vector3 up = Vector3.Normalize(new Vector3(world.M21, world.M22, world.M23)) * length;
+        Vector3 forward = Vector3.Normalize(new Vector3(world.M31, world.M32, world.M33)) * length;
+
+        DrawLine(pos, pos + right, new Vector4(1f, 0f, 0f, 1f));
+        DrawLine(pos, pos + up, new Vector4(0f, 1f, 0f, 1f));
+        DrawLine(pos, pos + forward, new Vector4(0f, 0f, 1f, 1f));
+    }
+
+    public void DrawGrid(Vector3 center, int halfLines, float spacing, Vector4 color)
+    {
+        if (!Enabled || halfLines <= 0 || spacing <= 0f)
+            return;
+
+        float extent = halfLines * spacing;
+        for (int i = -halfLines; i <= halfLines; i++)
+        {
+            float offset = i * spacing;
+            DrawLine(center + new Vector3(offset, 0f, -extent), center + new Vector3(offset, 0f, extent), color);
+            DrawLine(center + new Vector3(-extent, 0f, offset), center + new Vector3(extent, 0f, offset), color);
+        }
+    }
 
     public void Dispose()
     {

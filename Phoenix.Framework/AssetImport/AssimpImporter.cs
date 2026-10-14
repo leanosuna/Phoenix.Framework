@@ -115,6 +115,37 @@ public static unsafe class AssimpImporter
             }
         }
 
+        if (options.CenterXZ && parts.Count > 0)
+        {
+            Vector3 sum = Vector3.Zero;
+            long count = 0;
+            foreach (var part in parts)
+            {
+                foreach (var mesh in part.Meshes)
+                {
+                    foreach (var v in mesh.Vertices)
+                    {
+                        var worldPos = Vector3.Transform(v.Position, mesh.Transform);
+                        sum += worldPos;
+                        count++;
+                    }
+                }
+            }
+
+            if (count > 0)
+            {
+                Vector3 avg = sum / count;
+                Matrix4x4 centerTransform = Matrix4x4.CreateTranslation(-avg.X, 0f, -avg.Z);
+                foreach (var part in parts)
+                {
+                    foreach (var mesh in part.Meshes)
+                    {
+                        mesh.Transform = mesh.Transform * centerTransform;
+                    }
+                }
+            }
+        }
+
         operation?.UpdateStatus("Writing binary model cache...", 0.9f);
         WriteBinary(cachePath, options, parts, boneInfoMap, animatorNodes, animations, inverseGlobalTransform, texNames);
 
@@ -762,19 +793,24 @@ public static unsafe class AssimpImporter
         if (string.IsNullOrWhiteSpace(textureString))
             return null;
 
-        string baseName = Path.GetFileNameWithoutExtension(textureString);
-        string fileName = Path.GetFileName(textureString);
+        string clean = textureString.Replace('\\', '/').Trim();
+        string baseName = Path.GetFileNameWithoutExtension(clean);
+        string fileName = Path.GetFileName(clean);
 
-        if (extractedMap.TryGetValue(textureString, out var matched))
+        if (extractedMap.TryGetValue(clean, out var matched))
             return matched;
         if (extractedMap.TryGetValue(fileName, out matched))
             return matched;
         if (extractedMap.TryGetValue(baseName, out matched))
             return matched;
 
-        string candidate = Path.Combine(modelDir, textureString);
+        string candidate = Path.Combine(modelDir, clean);
         if (File.Exists(candidate))
             return candidate;
+
+        string sameFolder = Path.Combine(modelDir, fileName);
+        if (File.Exists(sameFolder))
+            return sameFolder;
 
         string fromExtracted = Path.Combine(modelDir, "extracted", fileName);
         if (File.Exists(fromExtracted))
@@ -783,6 +819,52 @@ public static unsafe class AssimpImporter
         string fromExtractedPng = Path.Combine(modelDir, "extracted", $"{baseName}.png");
         if (File.Exists(fromExtractedPng))
             return fromExtractedPng;
+
+        if (Directory.Exists(modelDir))
+        {
+            string[] searchDirs =
+            [
+                Path.Combine(modelDir, $"{Path.GetFileNameWithoutExtension(clean)}.fbm"),
+                Path.Combine(modelDir, "textures"),
+                Path.Combine(modelDir, "Textures"),
+                Path.Combine(modelDir, "tex"),
+                Path.Combine(modelDir, "Tex"),
+                Path.Combine(modelDir, "materials")
+            ];
+
+            foreach (var dir in searchDirs)
+            {
+                if (Directory.Exists(dir))
+                {
+                    string p = Path.Combine(dir, fileName);
+                    if (File.Exists(p)) return p;
+                }
+            }
+
+            foreach (var fbmDir in Directory.GetDirectories(modelDir, "*.fbm", SearchOption.AllDirectories))
+            {
+                string p = Path.Combine(fbmDir, fileName);
+                if (File.Exists(p)) return p;
+            }
+
+            try
+            {
+                var matches = Directory.GetFiles(modelDir, fileName, SearchOption.AllDirectories);
+                if (matches.Length > 0)
+                    return matches[0];
+
+                string[] exts = [".png", ".jpg", ".jpeg", ".tga", ".bmp", ".dds"];
+                foreach (var ext in exts)
+                {
+                    matches = Directory.GetFiles(modelDir, baseName + ext, SearchOption.AllDirectories);
+                    if (matches.Length > 0)
+                        return matches[0];
+                }
+            }
+            catch
+            {
+            }
+        }
 
         return null;
     }

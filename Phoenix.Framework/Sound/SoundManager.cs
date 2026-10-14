@@ -1,4 +1,5 @@
 using Phoenix;
+using Phoenix.Framework.AssetImport;
 using Phoenix.Framework.Sound.Decoders;
 using Silk.NET.OpenAL;
 using System.Numerics;
@@ -91,6 +92,8 @@ namespace Phoenix.Framework.Sound
         {
             if (!EnsureInitialized())
                 throw new InvalidOperationException("SoundManager.Initialize() must be called first.");
+
+            path = AssetLoader.ResolvePath(path);
 
             var decoder = _decoders.FirstOrDefault(d => d.CanDecode(path))
                 ?? throw new NotSupportedException($"No decoder available for file: {path}");

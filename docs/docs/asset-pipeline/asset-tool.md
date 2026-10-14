@@ -1,104 +1,89 @@
-# AssetTool
+# Asset tool (pat)
 
-`Phoenix.AssetTool` is a companion tool for compiling source assets (FBX models, PNG textures, GLSL shaders) into Phoenix's binary format.
+`Phoenix.AssetTool` (invoked as `pat` or `dotnet pat`) is the companion tool for compiling source assets (FBX/OBJ models, PNG/JPG textures, GLSL shaders) into Phoenix's binary distribution format (`.contentbin/`).
 
-## Building Assets
+---
 
-### CLI Commands
+## CLI commands
+
+Run `pat` commands from your project root:
 
 ```bash
-# Initialize an empty manifest, -force to replace
-dotnet pat Content/asset-manifest.json init
+# Batch build all assets into .contentbin
+dotnet pat build
 
-# Start the AssetTool GUI
-dotnet pat Content/asset-manifest.json gui
+# Force rebuild of all assets regardless of cache timestamps
+dotnet pat build -force
 
-# Clean the ContentBin folder
-dotnet pat Content/asset-manifest.json clean
+# Watch Content/ folder, rebuild changes, and notify running game clients
+dotnet pat watch
 
-# add files to the manifest
-dotnet pat Content/asset-manifest.json add [path-to-file] [path-to-file2] ...
+# Launch the Web Asset Studio UI and live IPC server on port 28473
+dotnet pat web
 
-# add all files in Content/ to the manifest
-dotnet pat Content/asset-manifest.json add . 
+# Run headless WebSocket IPC server and UDP discovery beacon
+dotnet pat serve
 
-# remove files from the manifest
-dotnet pat Content/asset-manifest.json rem [path-to-file] [path-to-file2] ...
-
-# List all of the files in the manifest
-dotnet pat Content/asset-manifest.json list
-
-# Build all of the files in the manifest
-dotnet pat Content/asset-manifest.json build
-
-# Automatically track files in the manifest and rebuild changes
-dotnet pat Content/asset-manifest.json auto
+# Clean the .contentbin folder
+dotnet pat clean
 ```
 
-### GUI
+---
 
-The GUI provides:  
-- **File Selector** — Opens native file explorer window to select assets  
-- **Asset Browser** — Browse and preview assets  
-- **Build Panel** — Build selected assets, see real-time progress  
-- **Options (right panel)** — Configure model export settings, texture compression  
-- **Build Error (right panel)** — Hovering on a item that failed build shows a pop-up 
-with the error log, click it to open on the right panel
+## Output binary formats (.contentbin)
 
-### GUI Notes:
-- You can select on the top left if you desire light or dark theme.  
-- You can resize the font by clicking the buttons in the top left, or by Ctrl+MouseWheel Up/Down.  
-- You can add/remove items from build directly from the asset browser.
-- You can resize the left and right panels.
-- In the options for an asset you can run a build process for that item only.
+When `pat build` executes, it processes source assets into binary bundles:
 
-## Supported Formats
+| Input | Output format | Features |
+|---|---|---|
+| **Models** (FBX, OBJ, GLTF) | `.pmdl` | Geometry buffers, vertex attributes, bone hierarchy, animation tracks |
+| **Textures** (PNG, JPG, TGA) | `.dds` | Precomputed mipmaps, BC1/BC3/BC5/BC7 block compression |
+| **Shaders** (vert, frag, comp) | `.spv` | Compiled SPIR-V bytecode validated against Vulkan 1.3 target |
 
-### Models
+---
 
-| Input | Output | Features |
-|-------|--------|----------|
-| FBX, OBJ, GLTF, 3DS, DAE, BLEND | `.bin` | Static meshes, skeleton animation, UVs, normals, tangents, bone weights |
+## Sidecar configuration files
 
-### Textures
+Assets support optional JSON sidecars (`<assetname>.<ext>.json`) stored alongside source files in `Content/`:
 
-| Input | Output | Compression |
-|-------|--------|-------------|
-| PNG, JPG, BMP, TGA | `.bin` | BC1 (DXT1), BC3 (DXT5), BC5 (RGTC2), RGBA8 (uncompressed) |
+### Model sidecar example (`sponza.fbx.json`)
 
-### Shaders
+```json
+{
+  "Scale": 0.01,
+  "CalculateTangents": true,
+  "FlipUV": false,
+  "SwapYZ": false
+}
+```
 
-| Input | Output |
-|-------|--------|
-| `.glsl`, `.vert`, `.frag` | `.glsl`, `.vert`, `.frag` (copied as-is) |
+### Texture sidecar example (`normal.png.json`)
 
-Shaders are not converted into bin files, they are passed through unchanged.  
-They are, however compiled an verified for errors at build time.
+```json
+{
+  "CompressionFormat": "BC5",
+  "GenerateMipmaps": true,
+  "Filter": "Linear",
+  "Wrap": "Repeat"
+}
+```
 
-## Build Options
+The tool bakes sidecar settings directly into the binary output files during compilation.
 
-### Model Load Options
+---
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `IsAnimated` | `false` | Is an animated model, extract animations |
-| `Extract Textures` | `true` | Contains embedded textures, extract them |
-| `Assimp Flags` | `per option default` | Postprocessing Flags for assimp |
+## Live hot reloading workflow
 
-### Texture Load Options
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `Generate MipMaps` | `true` | Generate mipmaps for this texture |
-| `Compression` | `BC3` | Target compression format |
-| `Wrap Horizontal` | `repeat` | WrapS |
-| `Wrap Vertical` | `repeat` | WrapT |
-| `Min filter` | `Linear Mipmap Linear` | Interpolation filter min|
-| `Mag filter` | `Linear` | Interpolation filter mag|
-
-
-## See Also
-
-- [Loading Assets](loading.md) — using compiled assets at runtime
-- [Models](../rendering/models.md) — rendering compiled models
-- [Textures](../rendering/textures.md) — working with compiled textures
+1. Start your asset server or watch process:
+   ```bash
+   dotnet pat watch
+   ```
+2. In a second terminal, launch your game:
+   ```bash
+   dotnet run
+   ```
+3. When you modify an asset or tweak a sidecar JSON file:
+   - `pat watch` detects the change and recompiles the binary.
+   - The tool server broadcasts an `AssetReloadMessage` over WebSocket (port 28473).
+   - The game's `AssetIpcClient` intercepts the message and fires `OnModelReloaded`, `OnTextureReloaded`, or `OnShaderReloaded`.
+   - Your scene updates live without restarting the game.

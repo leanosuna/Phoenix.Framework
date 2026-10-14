@@ -56,6 +56,11 @@ public abstract class PhoenixGame : IDisposable
     public Graphics Graphics { get; private set; } = default!;
 
     /// <summary>
+    /// Gets the live asset hot-reloading IPC client.
+    /// </summary>
+    public AssetIpcClient? AssetClient { get; private set; }
+
+    /// <summary>
     /// Gets the parsed command-line launch arguments.
     /// </summary>
     public GameArguments Arguments { get; }
@@ -207,6 +212,27 @@ public abstract class PhoenixGame : IDisposable
     }
 
     /// <summary>
+    /// Invoked on the main game thread when a 3D model asset has been recompiled or reloaded from the asset server.
+    /// </summary>
+    protected virtual void OnModelReloaded(ModelReloadEventArgs e)
+    {
+    }
+
+    /// <summary>
+    /// Invoked on the main game thread when a 2D texture asset has been reloaded from the asset server.
+    /// </summary>
+    protected virtual void OnTextureReloaded(TextureReloadEventArgs e)
+    {
+    }
+
+    /// <summary>
+    /// Invoked on the main game thread when a shader asset has been recompiled from the asset server.
+    /// </summary>
+    protected virtual void OnShaderReloaded(ShaderReloadEventArgs e)
+    {
+    }
+
+    /// <summary>
     /// Initializes window state, Vulkan backend, input, and viewport settings.
     /// </summary>
     private void InternalLoad()
@@ -230,6 +256,23 @@ public abstract class PhoenixGame : IDisposable
         Primitive.Initialize(Graphics);
         Gizmos = new Gizmos(this);
         UI = new UI(this);
+
+        AssetClient = new AssetIpcClient();
+        AssetClient.ModelReloaded += e => OnModelReloaded(e);
+        AssetClient.TextureReloaded += e => OnTextureReloaded(e);
+        AssetClient.ShaderReloaded += e => OnShaderReloaded(e);
+
+        if (Arguments.Options.TryGetValue("asset-server", out var serverHost) && !string.IsNullOrEmpty(serverHost))
+        {
+            var parts = serverHost.Split(':');
+            int port = parts.Length > 1 && int.TryParse(parts[1], out var p) ? p : 28473;
+            AssetClient.Connect(parts[0], port);
+        }
+        else
+        {
+            AssetClient.Connect("127.0.0.1", 28473);
+        }
+
         Initialize();
 
         if (Graphics.Swapchain.IsVSyncEnabled != Window.VSync)
@@ -245,6 +288,7 @@ public abstract class PhoenixGame : IDisposable
     {
         Metrics.ProcessUpdate(deltaTime);
         Input.Update();
+        AssetClient?.Update();
 
         if (Gizmos.Enabled)
             Gizmos.Update();
@@ -295,7 +339,14 @@ public abstract class PhoenixGame : IDisposable
 
         if (Graphics.Viewport.Enabled)
         {
-            Graphics.RenderContext.BlitToSwapchain(Graphics.SceneRenderTarget, Graphics.Viewport.Filter);
+            if (Graphics.RenderContext.HasRenderedPass)
+            {
+                Graphics.RenderContext.BlitToSwapchain(Graphics.SceneRenderTarget, Graphics.Viewport.Filter);
+            }
+            else
+            {
+                Graphics.RenderContext.FallbackClearPass(Graphics.ClearColor);
+            }
         }
         else if (!Graphics.RenderContext.HasRenderedPass)
         {
@@ -328,8 +379,10 @@ public abstract class PhoenixGame : IDisposable
         Graphics?.WaitIdle();
         Gizmos?.Dispose();
         UI?.Dispose();
+        AssetClient?.Dispose();
         AssetLoader.UnloadAll();
         SoundManager.Shutdown();
+        Primitive.Shutdown();
         OnClose();
 
         Graphics?.Dispose();

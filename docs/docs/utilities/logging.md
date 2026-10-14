@@ -1,198 +1,82 @@
-# Logging
+# Logging and metrics
 
-Phoenix provides two logging mechanisms: `Log` (file-based) and `ErrorListWindow` (in-game overlay).
+Namespace: `Phoenix.Framework.FileHelpers`
 
-## Log (File-Based)
+Phoenix provides file and console logging via `Log`, an in-game error overlay via `ErrorListWindow`, and frame performance counters via `Metrics`.
 
-Thread-safe file logging to `{BaseDirectory}/LOG.txt`.
+---
+
+## Log (file and console)
+
+Thread-safe logging writing to `{BaseDirectory}/LOG.txt` and optionally to the console.
 
 ### Configuration
 
 ```csharp
 Log.Enabled = true;      // Enable logging
 Log.Verbose = true;      // Include verbose messages
-Log.ConsoleWrite = true; // Also write to console
-Log.Date = true;         // Include date in log entries
-Log.Time = true;         // Include time in log entries
+Log.ConsoleWrite = true; // Output to standard console
+Log.Date = true;         // Include date timestamp
+Log.Time = true;         // Include time timestamp
 ```
 
-### Log Levels
+### Log levels
 
 ```csharp
-// Informational
-Log.Info("Game started");
-
-// Warnings
-Log.Warn("Low disk space, may fail to save");
-
-// Errors
-Log.Error("Failed to load texture: textures/missing.png");
-
-// Debug
-Log.Debug("Processing frame 42");
-
-// Exceptions
-Log.Exception("Crash occurred");
+Log.Info("Game started (Vulkan 1.3 pipeline)");
+Log.Warn("Low GPU memory warning");
+Log.Error("Failed to find model asset: 3D/missing.fbx");
+Log.Debug("Frame 60 completed");
+Log.Exception("Fatal error encountered");
 ```
 
-> Note: all `Log` methods take a single plain `string` message — no format placeholders or exception arguments.
-
-### Clearing the Log
+### Clearing the log
 
 ```csharp
 Log.ClearLog();
 ```
 
-### Auto-Enable on Exception
+---
 
-When `PhoenixGame.Run()` catches an unhandled exception, it automatically enables logging with all flags and writes the exception to the log file.
+## ErrorListWindow (in-game overlay)
 
-```
-// LOG.txt (example):
-[2026-05-10 14:32:01] ERROR: Failed to load shader: shaders/pbr
-   at GLShader.LoadShader(ShaderType type, string path)
-   at AssetLoader.LoadShader(string name)
-```
-
-### Thread Safety
-
-Log writes are protected by a `lock` statement. However, `File.AppendAllText` opens and closes the file per-write, which may cause issues in multi-process scenarios.
-
-## ErrorListWindow (In-Game Overlay)
-
-Centralized error reporting displayed as an ImGui overlay. Errors from all subsystems are collected here.
-
-### Visibility
+`ErrorListWindow` collects and displays warnings and non-fatal runtime errors as an ImGui overlay:
 
 ```csharp
-ErrorListWindow.Show = true;   // Show overlay (default: false)
-ErrorListWindow.Show = false;  // Hide overlay
+// Simple error
+ErrorListWindow.Add("Asset format unrecognized");
+
+// Auto-expiring alert (hidden after 5 seconds)
+ErrorListWindow.Add("Device resumed from standby", showTimeSeconds: 5f);
+
+// Toggle visibility
+ErrorListWindow.Show = true;
 ```
 
-### Adding Errors
+Deduplication: adding the same error string increments its counter rather than creating duplicate lines.
 
-Errors are auto-added by the framework. You can also add custom errors:
+---
 
-```csharp
-// Simple error — caller info auto-filled
-ErrorListWindow.Add("Something went wrong");
+## Performance metrics (Metrics)
 
-// With auto-expire (hidden after N seconds)
-ErrorListWindow.Add("Temporary issue", showTimeSeconds: 5f);
+Exposed as `PhoenixGame.Metrics`. Tracks frame timings and update rates:
 
-// With explicit caller info
-ErrorListWindow.Add(
-    "Custom error message",
-    "MyGame.cs",       // filePath
-    42,                 // lineNumber
-    "MyMethod",         // memberName
-    0                   // showTimeSeconds (0 = persistent)
-);
-```
+| Counter | Type | Description |
+|---|---|---|
+| `Time` | `double` | Total elapsed simulation time in seconds |
+| `FrameTime` | `double` | Elapsed delta time of the most recent render frame |
+| `FT_SAMPLE` | `int` | Smoothed frame time in milliseconds |
+| `FPS` | `double` | Instantaneous frames per second |
+| `FPS_SAMPLE` | `int` | Smoothed frames per second counter |
+| `UPS` | `double` | Instantaneous updates per second |
+| `UPS_SAMPLE` | `int` | Smoothed updates per second counter |
 
-### How Errors Are Deduplicated
-
-Adding the same error message twice increments the count instead of creating a new entry:
+Display in your UI or ImGui overlay:
 
 ```csharp
-ErrorListWindow.Add("Shader compile failed");
-ErrorListWindow.Add("Shader compile failed");
-// Shows: "Shader compile failed" ×2
-```
-
-### Error Display
-
-Each error entry shows:
-- **Error icon and message**
-- **Count** (if deduplicated)
-- **Hover tooltip** showing caller file, line number, and method name
-
-### Which Systems Report Errors
-
-| System | When It Reports |
-|--------|----------------|
-| `GLShader` | Uniform not found (unless `ignoreUniformsNotFound`) |
-| `GLTexture` | Texture loading failures |
-| `SoundManager` | OpenAL device/context errors |
-| `Graphics` | State management errors |
-| `AssetLoader` | Asset not found in manifest |
-| `GLCompiler` | Shader compile/link failures |
-
-## Complete Example
-
-```csharp
-public class MyGame : PhoenixGame
+protected override void RenderUI()
 {
-    protected override void Initialize()
-    {
-        // Enable file logging
-        Log.Enabled = true;
-        Log.Verbose = true;
-        Log.Date = true;
-        Log.Time = true;
-
-        // Show error overlay in debug builds
-#if DEBUG
-        ErrorListWindow.Show = true;
-#endif
-
-        Log.Info("Game initialized");
-    }
-
-    protected override void Update(double dt)
-    {
-        try
-        {
-            // Game logic
-        }
-        catch (Exception ex)
-        {
-            Log.Exception($"Update loop error: {ex.Message}");
-            ErrorListWindow.Add($"Update error: {ex.Message}");
-        }
-    }
-
-    protected override void Render(double dt)
-    {
-        try
-        {
-            // Rendering
-        }
-        catch (Exception ex)
-        {
-            Log.Exception($"Render loop error: {ex.Message}");
-            ErrorListWindow.Add($"Render error: {ex.Message}");
-        }
-    }
-
-    protected override void OnClose()
-    {
-        Log.Info("Game closing");
-        Log.ClearLog();
-        base.OnClose();
-    }
+    UI.DrawText($"FPS: {Metrics.FPS_SAMPLE}", new Vector2(10, 10), Vector4.One, 16);
+    UI.DrawText($"FT:  {Metrics.FT_SAMPLE}ms", new Vector2(10, 30), Vector4.One, 16);
 }
 ```
-
-## Log File Format
-
-Each log line format:
-
-```
-[{Date} {Time}] {Level}: {Message}
-```
-
-Example:
-
-```
-[2026-05-10 14:32:01] INFO: Game started
-[2026-05-10 14:32:02] WARN: CFG not found, loading default.
-[2026-05-10 14:32:05] ERROR: Expected 3 enemies, found 2.
-[2026-05-10 14:32:05] EXCEPTION: System.NullReferenceException: Object reference not set to an instance of an object.
-```
-
-## See Also
-
-- [ErrorListWindow](../rendering/ui.md) — the overlay component
-- [Shaders](../rendering/shaders.md) — shader uniform errors
-- [AssetLoader](../asset-pipeline/loading.md) — asset loading errors
