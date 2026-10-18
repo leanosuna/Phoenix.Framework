@@ -39,4 +39,20 @@ public struct SubmeshMetadata
         SpecularIndex = specularIndex;
         MaterialFlags = materialFlags;
     }
+
+    public SubmeshMetadata(
+        in Matrix4x4 world,
+        in Matrix4x4 worldInverseTranspose,
+        uint albedoIndex = 0,
+        uint normalIndex = 0,
+        uint specularIndex = 0,
+        uint materialFlags = 0)
+    {
+        World = world;
+        WorldInverseTranspose = worldInverseTranspose;
+        AlbedoIndex = albedoIndex;
+        NormalIndex = normalIndex;
+        SpecularIndex = specularIndex;
+        MaterialFlags = materialFlags;
+    }
 }

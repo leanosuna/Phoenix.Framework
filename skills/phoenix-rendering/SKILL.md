@@ -20,7 +20,7 @@ Rendering is driven from `PhoenixGame.Render()`. Assets are compiled to binary b
 - Primitives: `Primitive` + `Cube`/`Sphere`/`Cylinder`/`Plane`/`Pyramid`/`Frustum` via `Create(...)`; requires `Primitive.SetGL(gl)` first.
 - UI: `UI.DrawText/DrawCenteredText/DrawHCenteredText/DrawRAlignedText`, `DrawImg`, `DrawSimpleButton`, `LoadFontTTF`, `SetFontSize`. Font pushes are auto-balanced.
 - Gizmos: `Gizmos.AddLine/AddCube/AddSphere/AddCylinder/AddPlane/AddCapsule/AddVolume/AddAxisLines`, `Enabled`.
-- `CommonUBO` at binding point 0 (`View, Projection, Time, DeltaTime`) — attach via `shader.AttachUBO(Game.CommonUboHandle, "CommonData")`.
+- `FrameUniforms` at binding point 0 (`View, Projection, Time, DeltaTime`) — attach via `shader.AttachUBO(Game.FrameUniformsHandle, "CommonData")`.
 
 ## Gotchas
 

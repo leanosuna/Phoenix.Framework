@@ -18,7 +18,7 @@ It targets .NET 10 and runs on Windows, macOS (via MoltenVK), and Linux (Wayland
 | Vulkan 1.3 core | Stable | Dynamic rendering, Synchronization2, double-buffered swapchain, per-frame inflight fences |
 | Rendering context | Stable | Scoped dynamic passes, attachment layout transitions, viewport scaling, swapchain blitting |
 | Bindless textures | Stable | Global descriptor array indexing up to 4096 or 16384 textures directly through 80-byte push constants |
-| Shaders & pipelines | Stable | SPIR-V graphics and compute pipelines with standardized CommonUBO, bone, and metadata descriptor sets |
+| Shaders & pipelines | Stable | SPIR-V graphics and compute pipelines with standardized FrameUniforms, bone, and metadata descriptor sets |
 | Geometry & MDI | Stable | Standard models and Multi-Draw Indirect packing via `IndirectMeshBuilder` and `IndirectMeshRenderer` |
 | Skeletal animation | Stable | Bone hierarchy parsing, keyframe sampling, FBX dummy node folding, and Set 2 bone uniform buffers |
 | Render targets | Stable | Offscreen color and depth targets, G-buffers, MSAA, and post-processing blit operations |
@@ -35,10 +35,10 @@ It targets .NET 10 and runs on Windows, macOS (via MoltenVK), and Linux (Wayland
 ```
 PhoenixGame
  ├── Arguments ─────► CLI options (window dimensions, VSync, platform backend)
- ├── Graphics ──────► VulkanContext, VulkanSwapchain, CommonUBO, BindlessManager
+ ├── Graphics ──────► VulkanContext, VulkanSwapchain, FrameUniforms, BindlessManager
  │    └── RenderContext ──► Scoped dynamic passes, pipeline binding, MDI, blitting
  ├── Input ─────────► Keyboard, mouse, edge-detected press queries
- ├── Camera ────────► View and projection matrices bound into CommonUBO
+ ├── Camera ────────► View and projection matrices bound into FrameUniforms
  ├── Gizmos ────────► Debug line rendering
  ├── UI ────────────► ImGui Vulkan overlay
  ├── SoundManager ──► OpenAL audio playback and 3D voices

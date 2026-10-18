@@ -23,6 +23,7 @@ public static class AssetLoader
     private static Graphics? _graphics;
     private static string _contentRoot = "Content";
     private static string _cacheRoot = ".cache";
+    private static string _contentBinRoot = ".contentbin";
 
     private static readonly Dictionary<string, Model> _loadedModels = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, VulkanTexture> _loadedTextures = new(StringComparer.OrdinalIgnoreCase);
@@ -35,11 +36,12 @@ public static class AssetLoader
     /// <summary>
     /// Initializes the asset pipeline with the current Graphics subsystem and optional custom directory roots.
     /// </summary>
-    public static void Initialize(Graphics graphics, string contentRoot = "Content", string cacheRoot = ".cache")
+    public static void Initialize(Graphics graphics, string contentRoot = "Content", string cacheRoot = ".cache", string contentBinRoot = ".contentbin")
     {
         _graphics = graphics;
         _contentRoot = contentRoot;
         _cacheRoot = cacheRoot;
+        _contentBinRoot = contentBinRoot;
 
         Directory.CreateDirectory(Path.Combine(_cacheRoot, "models"));
         Directory.CreateDirectory(Path.Combine(_cacheRoot, "shaders"));
@@ -242,6 +244,27 @@ public static class AssetLoader
 
             CompressedTextureData texData = await Task.Run(() =>
             {
+                if (resolved.EndsWith(".dds", StringComparison.OrdinalIgnoreCase))
+                {
+                    op.UpdateStatus($"Reading direct DDS {Path.GetFileName(resolved)}...", 0.5f);
+                    return DdsReader.Read(resolved, resolvedOptions.IsSRgb);
+                }
+
+                string contentBinDds = Path.Combine(_contentBinRoot, "textures", sanitizedName + ".dds");
+                if (File.Exists(contentBinDds))
+                {
+                    op.UpdateStatus($"Reading .contentbin DDS {sanitizedName}.dds...", 0.5f);
+                    return DdsReader.Read(contentBinDds, resolvedOptions.IsSRgb);
+                }
+
+                string contentBinPtex = Path.Combine(_contentBinRoot, "textures", sanitizedName + ".ptex");
+                var binPtex = TryReadPtexFile(contentBinPtex);
+                if (binPtex != null)
+                {
+                    op.UpdateStatus($"Reading .contentbin PTEX {sanitizedName}.ptex...", 0.5f);
+                    return binPtex;
+                }
+
                 int maxDim = resolvedOptions.MaxSize > 0 ? resolvedOptions.MaxSize : 1024;
                 int expectedW = -1;
                 int expectedH = -1;
@@ -525,11 +548,22 @@ public static class AssetLoader
         string sanitizedName = Path.GetFileNameWithoutExtension(resolved);
         string cacheFile = Path.Combine(_cacheRoot, "models", $"{sanitizedName}_{cacheKey}.bin");
 
-        bool canUseCache = File.Exists(cacheFile) &&
-            File.GetLastWriteTimeUtc(cacheFile) >= File.GetLastWriteTimeUtc(resolved) &&
-            (sourceFile == null || File.GetLastWriteTimeUtc(cacheFile) >= File.GetLastWriteTimeUtc(sourceFile));
+        string contentBinPmdl = Path.Combine(_contentBinRoot, "models", sanitizedName + ".pmdl");
+        string contentBinPhxm = Path.Combine(_contentBinRoot, "models", sanitizedName + ".phxm");
+        string contentBinBin = Path.Combine(_contentBinRoot, "models", sanitizedName + ".bin");
 
-        var modelTask = AssetLoadingTracker.BeginOperation(resolved, AssetLoadOperationType.Model, canUseCache ? "Loading from binary cache..." : "Importing FBX/GLTF via Assimp...");
+        string? contentBinFile = File.Exists(contentBinPmdl) ? contentBinPmdl
+            : File.Exists(contentBinPhxm) ? contentBinPhxm
+            : File.Exists(contentBinBin) ? contentBinBin
+            : null;
+
+        bool hasContentBin = contentBinFile != null;
+        bool canUseCache = hasContentBin || (File.Exists(cacheFile) &&
+            File.GetLastWriteTimeUtc(cacheFile) >= File.GetLastWriteTimeUtc(resolved) &&
+            (sourceFile == null || File.GetLastWriteTimeUtc(cacheFile) >= File.GetLastWriteTimeUtc(sourceFile)));
+
+        string fileToRead = contentBinFile ?? cacheFile;
+        var modelTask = AssetLoadingTracker.BeginOperation(resolved, AssetLoadOperationType.Model, hasContentBin ? "Loading from .contentbin..." : canUseCache ? "Loading from binary cache..." : "Importing FBX/GLTF via Assimp...");
 
         try
         {
@@ -537,7 +571,7 @@ public static class AssetLoader
             {
                 if (canUseCache)
                 {
-                    var m = BinaryModelReader.Read(_graphics!, cacheFile);
+                    var m = BinaryModelReader.Read(_graphics!, fileToRead);
                     return (m, (List<EmbeddedTexturePayload>?)null);
                 }
                 else
@@ -853,6 +887,46 @@ public static class AssetLoader
                     model.NotifyTextureLoaded(textureIndex, null!);
                 }
             });
+        }
+    }
+
+    private static CompressedTextureData? TryReadPtexFile(string filePath)
+    {
+        if (!File.Exists(filePath))
+            return null;
+
+        try
+        {
+            using var fs = File.OpenRead(filePath);
+            using var br = new BinaryReader(fs);
+            uint magic = br.ReadUInt32();
+            if (magic != 0x58455450) // "PTEX"
+                return null;
+
+            uint ver = br.ReadUInt32();
+            if (ver != 2)
+                return null;
+
+            int width = br.ReadInt32();
+            int height = br.ReadInt32();
+            var format = (TextureCompressionFormat)br.ReadInt32();
+            bool isSRgb = br.ReadBoolean();
+            int mipCount = br.ReadInt32();
+
+            List<CompressedMipLevel> mips = new(mipCount);
+            for (int i = 0; i < mipCount; i++)
+            {
+                int mW = br.ReadInt32();
+                int mH = br.ReadInt32();
+                int len = br.ReadInt32();
+                byte[] data = br.ReadBytes(len);
+                mips.Add(new CompressedMipLevel(mW, mH, data));
+            }
+            return new CompressedTextureData(width, height, format, isSRgb, mips);
+        }
+        catch
+        {
+            return null;
         }
     }
 }

@@ -121,7 +121,7 @@ void main() {
             DepthTestEnable = false,
             DepthWriteEnable = false,
             BlendEnable = true,
-            DescriptorSetLayouts = [_graphics.CommonUBOLayout, _graphics.BindlessLayout],
+            DescriptorSetLayouts = [_graphics.FrameUniformsLayout, _graphics.BindlessLayout],
             PushConstantsSize = (uint)sizeof(ImGuiPushConstants),
             ColorFormat = _graphics.Swapchain.ImageFormat,
             DepthFormat = Format.Undefined

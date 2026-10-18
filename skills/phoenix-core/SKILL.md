@@ -18,7 +18,7 @@ Phoenix is a lightweight 3D game framework on Silk.NET + OpenGL (net10.0). A gam
 - `PhoenixGame.Input` — keyboard/mouse. NOT `InputManager`.
 - `PhoenixGame.Graphics` — window control + GL state + render targets.
 - `PhoenixGame.Camera` — assign your camera in `Initialize()`.
-- `PhoenixGame.UI` / `Gizmos` / `FullScreenQuad` / `CommonUboHandle`.
+- `PhoenixGame.UI` / `Gizmos` / `FullScreenQuad` / `FrameUniformsHandle`.
 - `FreeCamera` (→ `MouseCamera` → `BaseCamera` → `Camera`) — ctor `(game, position, yaw, pitch, fov, nearPlane, farPlane, aspectRatio)`; `SetMoveKeys(...)`, `SetPitchYawKeys(...)`, `Update(double)`.
 - `Input` — `KeyDown/KeyDownOnce`, `MouseDown/MouseDownOnce`, `MouseLeft/RightDown(Once)`, `MouseDelta`, `MouseWheelPrecise` (float, accumulates), `MouseWheelValue` (int, whole notches), `SetMouseMode/ToggleMouseMode`, `GetContext()`.
 

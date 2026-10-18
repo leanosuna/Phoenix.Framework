@@ -7,6 +7,7 @@ using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using piko.VulkanMemoryAllocator;
 
 namespace Phoenix.Framework.Rendering.Vulkan;
 
@@ -31,7 +32,11 @@ public sealed unsafe class VulkanContext : IDisposable
     private readonly DebugUtilsMessengerEXT _debugMessenger;
     private CommandPool _utilityCommandPool;
     private readonly object _utilityCommandLock = new();
+    private CommandPool _transferCommandPool;
+    private readonly object _transferCommandLock = new();
     public readonly object GraphicsQueueLock = new();
+    public readonly object TransferQueueLock = new();
+    private Allocator _allocator;
     private bool _disposed;
 
     public Vk Vk => _vk;
@@ -42,6 +47,7 @@ public sealed unsafe class VulkanContext : IDisposable
     public PhysicalDeviceProperties PhysicalDeviceProperties => _physicalDeviceProperties;
     public Device Device => _device;
     public KhrSwapchain KhrSwapchain => _khrSwapchain;
+    public Allocator Allocator => _allocator;
     public Queue GraphicsQueue => _graphicsQueue;
     public uint GraphicsFamilyIndex => _graphicsFamilyIndex;
     public Queue PresentQueue => _presentQueue;
@@ -87,6 +93,8 @@ public sealed unsafe class VulkanContext : IDisposable
             throw new NotSupportedException("Vulkan swapchain extension (VK_KHR_swapchain) is not available on selected device.");
 
         CreateUtilityCommandPool();
+        CreateTransferCommandPool();
+        InitAllocator();
     }
 
     /// <summary>
@@ -126,7 +134,6 @@ public sealed unsafe class VulkanContext : IDisposable
         List<string> enabledLayers = [];
         bool validationActive = false;
 
-#if DEBUG
         if (enableValidation)
         {
             var availableLayers = GetAvailableInstanceLayers();
@@ -138,7 +145,6 @@ public sealed unsafe class VulkanContext : IDisposable
                     requiredExtensions.Add(ExtDebugUtils.ExtensionName);
             }
         }
-#endif
 
         InstanceCreateFlags createFlags = hasPortabilityEnumeration
             ? InstanceCreateFlags.EnumeratePortabilityBitKhr
@@ -681,7 +687,121 @@ public sealed unsafe class VulkanContext : IDisposable
     }
 
     /// <summary>
-    /// Destroys all Vulkan device, surface, and instance resources.
+    /// Creates a transient command pool dedicated to transfer queue operations.
+    /// </summary>
+    private void CreateTransferCommandPool()
+    {
+        uint familyIndex = _transferFamilyIndex ?? _graphicsFamilyIndex;
+        CommandPoolCreateInfo poolInfo = new()
+        {
+            SType = StructureType.CommandPoolCreateInfo,
+            Flags = CommandPoolCreateFlags.TransientBit,
+            QueueFamilyIndex = familyIndex
+        };
+
+        VulkanHelper.Check(_vk.CreateCommandPool(_device, in poolInfo, null, out _transferCommandPool),
+            "Failed to create transfer command pool.");
+    }
+
+    /// <summary>
+    /// Initializes Vulkan Memory Allocator (VMA) for memory pooling.
+    /// </summary>
+    private void InitAllocator()
+    {
+        VulkanFunctions funcs = new()
+        {
+            VkGetInstanceProcAddr = (IntPtr)_vk.Context.GetProcAddress("vkGetInstanceProcAddr"),
+            VkGetDeviceProcAddr = (IntPtr)_vk.Context.GetProcAddress("vkGetDeviceProcAddr")
+        };
+
+        AllocatorCreateInfo allocInfo = new()
+        {
+            PhysicalDevice = _physicalDevice,
+            Device = _device,
+            Instance = _instance,
+            VulkanApiVersion = Vk.Version13,
+            PVulkanFunctions = &funcs
+        };
+
+        Allocator allocator;
+        VulkanHelper.Check(VMA.CreateAllocator(&allocInfo, &allocator),
+            "Failed to initialize Vulkan Memory Allocator.");
+        _allocator = allocator;
+    }
+
+    /// <summary>
+    /// Begins recording a one-time command buffer for background asset upload operations on the transfer queue.
+    /// </summary>
+    public CommandBuffer BeginTransferCommands()
+    {
+        System.Threading.Monitor.Enter(_transferCommandLock);
+        try
+        {
+            CommandBufferAllocateInfo allocInfo = new()
+            {
+                SType = StructureType.CommandBufferAllocateInfo,
+                Level = CommandBufferLevel.Primary,
+                CommandPool = _transferCommandPool,
+                CommandBufferCount = 1
+            };
+
+            VulkanHelper.Check(_vk.AllocateCommandBuffers(_device, in allocInfo, out var commandBuffer),
+                "Failed to allocate transfer command buffer.");
+
+            CommandBufferBeginInfo beginInfo = new()
+            {
+                SType = StructureType.CommandBufferBeginInfo,
+                Flags = CommandBufferUsageFlags.OneTimeSubmitBit
+            };
+
+            VulkanHelper.Check(_vk.BeginCommandBuffer(commandBuffer, in beginInfo),
+                "Failed to begin transfer command buffer.");
+
+            return commandBuffer;
+        }
+        catch
+        {
+            System.Threading.Monitor.Exit(_transferCommandLock);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Ends recording, submits to the transfer queue, and waits for transfer completion without stalling the graphics queue.
+    /// </summary>
+    public void EndTransferCommands(CommandBuffer commandBuffer)
+    {
+        try
+        {
+            VulkanHelper.Check(_vk.EndCommandBuffer(commandBuffer),
+                "Failed to end transfer command buffer.");
+
+            SubmitInfo submitInfo = new()
+            {
+                SType = StructureType.SubmitInfo,
+                CommandBufferCount = 1,
+                PCommandBuffers = &commandBuffer
+            };
+
+            var queue = _transferQueue ?? _graphicsQueue;
+            lock (TransferQueueLock)
+            {
+                VulkanHelper.Check(_vk.QueueSubmit(queue, 1, in submitInfo, default),
+                    "Failed to submit transfer command buffer to transfer queue.");
+
+                _vk.QueueWaitIdle(queue);
+            }
+
+            _vk.FreeCommandBuffers(_device, _transferCommandPool, 1, in commandBuffer);
+        }
+        finally
+        {
+            System.Threading.Monitor.Exit(_transferCommandLock);
+        }
+    }
+
+    /// <summary>
+    /// Destroys all Vulkan device, surface, allocator, and instance resources.
     /// </summary>
     public void Dispose()
     {
@@ -693,10 +813,22 @@ public sealed unsafe class VulkanContext : IDisposable
             _vk.DeviceWaitIdle(_device);
         }
 
+        if (_transferCommandPool.Handle != 0)
+        {
+            _vk.DestroyCommandPool(_device, _transferCommandPool, null);
+            _transferCommandPool = default;
+        }
+
         if (_utilityCommandPool.Handle != 0)
         {
             _vk.DestroyCommandPool(_device, _utilityCommandPool, null);
             _utilityCommandPool = default;
+        }
+
+        if (_allocator.Handle != IntPtr.Zero)
+        {
+            VMA.DestroyAllocator(_allocator);
+            _allocator = default;
         }
 
         _khrSwapchain.Dispose();
@@ -716,4 +848,5 @@ public sealed unsafe class VulkanContext : IDisposable
         _disposed = true;
     }
 }
+
 

@@ -1,3 +1,4 @@
+using Box3D;
 using Phoenix.Framework.Collisions;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -135,9 +136,20 @@ public sealed class Gizmos : IDisposable
         DrawBox(aabb.Position, aabb.Size, color, hit);
     }
 
-    public void DrawBox(OrientedBoundingBox obb, Vector4 color, bool hit = false)
+    public void DrawBox(Box3D.BoundingBox box, Vector4 color, bool hit = false)
     {
-        DrawBox(obb._world, color, hit);
+        DrawBox(box.Center, box.Size, color, hit);
+    }
+
+    public void DrawBox(Box3D.Box box, Vector4 color, bool hit = false)
+    {
+        DrawBox(box.Center, box.Size, color, hit);
+    }
+
+    public void DrawBox(Box3D.Box box, Vector3 position, Quaternion rotation, Vector4 color, bool hit = false)
+    {
+        Matrix4x4 world = Matrix4x4.CreateScale(box.HalfExtents * 2f) * Matrix4x4.CreateFromQuaternion(rotation) * Matrix4x4.CreateTranslation(position);
+        DrawBox(world, color, hit);
     }
 
     public void DrawBox(Matrix4x4 world, Vector4 color, bool hit = false)
@@ -241,6 +253,16 @@ public sealed class Gizmos : IDisposable
         DrawSphere(sphere.Position, sphere.Radius, color, hit);
     }
 
+    public void DrawSphere(Box3D.Sphere sphere, Vector4 color, bool hit = false, int segments = 24)
+    {
+        DrawSphere(sphere.Center, sphere.Radius, color, hit, segments);
+    }
+
+    public void DrawSphere(Box3D.Sphere sphere, Vector3 center, Vector4 color, bool hit = false, int segments = 24)
+    {
+        DrawSphere(center, sphere.Radius, color, hit, segments);
+    }
+
     public void DrawSphere(Matrix4x4 world, Vector4 color, bool hit = false)
     {
         Vector3 position = world.Translation;
@@ -290,11 +312,6 @@ public sealed class Gizmos : IDisposable
                 DrawLine(b0, t0, color, hit);
             }
         }
-    }
-
-    public void DrawCylinder(BoundingCylinder cylinder, Vector4 color, bool hit = false)
-    {
-        DrawCylinder(cylinder.Position, cylinder.Radius, cylinder.Height, Quaternion.CreateFromRotationMatrix(cylinder.Rotation), color, hit);
     }
 
     public void DrawCylinder(Matrix4x4 world, Vector4 color, bool hit = false)
@@ -364,9 +381,21 @@ public sealed class Gizmos : IDisposable
         }
     }
 
-    public void DrawCapsule(Capsule capsule, Vector4 color, bool hit = false)
+    public void DrawCapsule(Phoenix.Framework.Collisions.Capsule capsule, Vector4 color, bool hit = false)
     {
         DrawCapsule(capsule.PointA, capsule.PointB, capsule.Radius, color, hit);
+    }
+
+    public void DrawCapsule(Box3D.Capsule capsule, Vector4 color, bool hit = false)
+    {
+        DrawCapsule(capsule.Start, capsule.End, capsule.Radius, color, hit);
+    }
+
+    public void DrawCapsule(Box3D.Capsule capsule, Vector3 position, Quaternion rotation, Vector4 color, bool hit = false)
+    {
+        Vector3 start = position + Vector3.Transform(capsule.Start, rotation);
+        Vector3 end = position + Vector3.Transform(capsule.End, rotation);
+        DrawCapsule(start, end, capsule.Radius, color, hit);
     }
 
     public void DrawPlane(Vector3 position, Vector3 normal, Vector2 size, Vector4 color, bool hit = false)
@@ -419,20 +448,26 @@ public sealed class Gizmos : IDisposable
             case AxisAlignedBoundingBox box:
                 DrawBox(box, c, hit);
                 break;
-            case OrientedBoundingBox obb:
-                DrawBox(obb, c, hit);
+            case Box3D.BoundingBox bBox:
+                DrawBox(bBox, c, hit);
                 break;
-            case BoundingCylinder cyl:
-                DrawCylinder(cyl, c, hit);
+            case Box3D.Box bObb:
+                DrawBox(bObb, c, hit);
                 break;
             case BoundingSphere sphere:
                 DrawSphere(sphere, c, hit);
                 break;
+            case Box3D.Sphere bSphere:
+                DrawSphere(bSphere, c, hit);
+                break;
             case BoundingFrustum frustum:
                 DrawFrustum(frustum, c, hit);
                 break;
-            case Capsule capsule:
+            case Phoenix.Framework.Collisions.Capsule capsule:
                 DrawCapsule(capsule, c, hit);
+                break;
+            case Box3D.Capsule bCapsule:
+                DrawCapsule(bCapsule, c, hit);
                 break;
         }
     }

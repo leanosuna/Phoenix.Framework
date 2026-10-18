@@ -145,9 +145,9 @@ public class AnimatedModel : Model
     }
 
     /// <summary>
-    /// Binds the bone descriptor set to Set 2 and renders all parts and submeshes.
+    /// Binds the bone descriptor set to Set 3 for skeletal vertex skinning.
     /// </summary>
-    public void BindBoneDescriptorSet(RenderContext rc, VulkanPipeline pipeline, uint setIndex = 2)
+    public void BindBoneDescriptorSet(RenderContext rc, VulkanPipeline pipeline, uint setIndex = 3)
     {
         if (BoneDescriptorSet.Handle != 0)
         {

@@ -21,6 +21,7 @@ public sealed class GameArguments
         "windowed",
         "vulkan-validation",
         "debug-layers",
+        "validation",
         "verbose",
         "debug"
     };
@@ -266,7 +267,7 @@ public sealed class GameArguments
         if (TryGetInt("fps", out var fps) || TryGetInt("fps-limit", out fps) || TryGetInt("max-fps", out fps))
             FpsLimit = fps;
 
-        VulkanValidation = Has("vulkan-validation") || Has("debug-layers");
+        VulkanValidation = Has("vulkan-validation") || Has("debug-layers") || Has("validation");
         Verbose = Has("verbose");
     }
 

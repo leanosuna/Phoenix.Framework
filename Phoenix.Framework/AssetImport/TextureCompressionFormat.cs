@@ -13,5 +13,6 @@ public enum TextureCompressionFormat
     BC3 = 2,
     BC4 = 3,
     BC5 = 4,
-    BC7 = 5
+    BC7 = 5,
+    BC2 = 6
 }

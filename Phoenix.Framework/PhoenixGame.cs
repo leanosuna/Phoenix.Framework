@@ -246,7 +246,7 @@ public abstract class PhoenixGame : IDisposable
         FramebufferSize = Window.FramebufferSize.ToNum();
         WindowSize = Window.Size.ToNum();
 
-        Graphics = new Graphics(this);
+        Graphics = new Graphics(this, Arguments.VulkanValidation);
         Input = new Input(this);
 
         InternalFramebufferResize(Window.FramebufferSize);
@@ -323,8 +323,9 @@ public abstract class PhoenixGame : IDisposable
         Matrix4x4 proj = Camera?.Projection ?? Matrix4x4.CreatePerspectiveFieldOfView(MathF.PI / 4f, (float)FramebufferWidth / FramebufferHeight, 0.1f, 1000f);
         Vector3 camPos = Camera?.Position ?? new Vector3(0, 0, 5);
 
-        CommonUBOData uboData = new(view, proj, camPos, (float)Metrics.Time, (float)deltaTime);
-        Graphics.CommonUbo.Update(Graphics.Swapchain.CurrentFrame, in uboData);
+        Vector2 resolution = new((float)FramebufferWidth, (float)FramebufferHeight);
+        FrameUniforms frameUniforms = new(view, proj, camPos, resolution, (float)Metrics.Time, (float)deltaTime);
+        Graphics.FrameUniformsManager.Update(Graphics.Swapchain.CurrentFrame, in frameUniforms);
 
         var cmd = Graphics.Swapchain.BeginCommandBuffer();
         Graphics.RenderContext.Prepare(cmd, imageIndex, Graphics.Swapchain.CurrentFrame);
@@ -337,7 +338,15 @@ public abstract class PhoenixGame : IDisposable
                 Gizmos.Render(Graphics.RenderContext);
         }
 
-        if (Graphics.Viewport.Enabled)
+        if (Graphics.RenderHalt)
+        {
+            // Preserve the frozen frame from the scene target instead of clearing to solid background color
+            if (Graphics.SceneRenderTarget != null)
+            {
+                Graphics.RenderContext.BlitToSwapchain(Graphics.SceneRenderTarget, Graphics.Viewport.Filter);
+            }
+        }
+        else if (Graphics.Viewport.Enabled)
         {
             if (Graphics.RenderContext.HasRenderedPass)
             {

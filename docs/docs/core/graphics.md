@@ -14,7 +14,7 @@ The `Graphics` class manages Vulkan devices, swapchain presentation, uniform buf
 | `Swapchain` | `VulkanSwapchain` | Double-buffered swapchain, depth-stencil buffer, and image presentation synchronization |
 | `RenderContext` | `RenderContext` | Active command recording context for dynamic passes, pipeline binding, and draw dispatches |
 | `Bindless` / `BindlessManager` | `BindlessManager` | Global texture descriptor array (Set 1) indexing up to 4096 or 16384 sampled images |
-| `CommonUbo` | `CommonUBOManager` | Manages per-frame camera matrices and timing uniforms (Set 0) |
+| `FrameUniformsManager` | `FrameUniformsManager` | Manages per-frame camera matrices and timing uniforms (Set 0) |
 | `Viewport` | `RenderViewport` | Viewport scaling controller for decoupling render resolution from window size |
 | `SceneRenderTarget` | `VulkanRenderTarget` | Offscreen scene color and depth target used when viewport scaling is active |
 | `ClearColor` | `Vector4` | Default clear color for rendering passes |
@@ -71,7 +71,7 @@ protected override void Render(RenderContext ctx, double deltaTime)
 ### Pipeline and resource binding
 
 - `BindPipeline(VulkanPipeline pipeline)`: Binds graphics pipeline and sets dynamic viewport and scissor rects.
-- `BindDefaultDescriptorSets(VulkanPipeline pipeline)`: Binds Set 0 (`CommonUBO`) and Set 1 (`Bindless`).
+- `BindDefaultDescriptorSets(VulkanPipeline pipeline)`: Binds Set 0 (`FrameUniforms`) and Set 1 (`Bindless`).
 - `BindDescriptorSets(VulkanPipeline pipeline, DescriptorSet[] sets, uint firstSet = 0)`: Binds custom descriptor sets.
 - `PushConstants(VulkanPipeline pipeline, in PushConstantsData data)`: Writes 80-byte push constants directly to GPU command registers.
 - `BindVertexBuffer(VulkanBuffer buffer, ulong offset = 0)`: Binds vertex attributes.

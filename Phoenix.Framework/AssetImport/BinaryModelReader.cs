@@ -19,7 +19,7 @@ public static class BinaryModelReader
         using var br = new BinaryReader(fs);
 
         string magic = br.ReadString();
-        if (magic != "PHXM")
+        if (magic != "PHXM" && magic != "PMDL")
             throw new InvalidDataException($"Invalid model binary magic: {magic}");
 
         uint version = br.ReadUInt32();
@@ -70,15 +70,15 @@ public static class BinaryModelReader
                 ulong vertexBufferSize = (ulong)(vertices.Length * Marshal.SizeOf<ModelVertex>());
                 var vertexBuffer = graphics.CreateBuffer(
                     vertexBufferSize,
-                    BufferUsageFlags.VertexBufferBit,
-                    MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+                    BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit,
+                    MemoryPropertyFlags.DeviceLocalBit);
                 vertexBuffer.SetData<ModelVertex>(vertices.AsSpan());
 
                 ulong indexBufferSize = (ulong)(indices.Length * sizeof(uint));
                 var indexBuffer = graphics.CreateBuffer(
                     indexBufferSize,
-                    BufferUsageFlags.IndexBufferBit,
-                    MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+                    BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit,
+                    MemoryPropertyFlags.DeviceLocalBit);
                 indexBuffer.SetData<uint>(indices.AsSpan());
 
                 meshes.Add(new ModelMesh(meshName, vertexBuffer, indexBuffer, (uint)vertices.Length, (uint)indices.Length, transform, materialIndex, normalIndex));

@@ -4,9 +4,9 @@ using System.Runtime.InteropServices;
 namespace Phoenix.Framework.Rendering.Vulkan;
 
 /// <summary>
-/// Manages Set 0 descriptor layout, pools, and per-frame-in-flight uniform buffers for global camera/timing data.
+/// Manages Set 0 descriptor layout, pools, and per-frame-in-flight uniform buffers for global camera and timing frame data.
 /// </summary>
-internal sealed unsafe class CommonUBOManager : IDisposable
+internal sealed unsafe class FrameUniformsManager : IDisposable
 {
     private readonly VulkanContext _context;
     private DescriptorSetLayout _descriptorSetLayout;
@@ -25,7 +25,7 @@ internal sealed unsafe class CommonUBOManager : IDisposable
     /// <summary>
     /// Initializes the Set 0 descriptor set layout, uniform buffers, descriptor pool, and writes descriptor bindings.
     /// </summary>
-    public CommonUBOManager(VulkanContext context)
+    public FrameUniformsManager(VulkanContext context)
     {
         _context = context;
 
@@ -55,7 +55,7 @@ internal sealed unsafe class CommonUBOManager : IDisposable
         };
 
         VulkanHelper.Check(_context.Vk.CreateDescriptorSetLayout(_context.Device, in layoutInfo, null, out _descriptorSetLayout),
-            "Failed to create CommonUBO descriptor set layout.");
+            "Failed to create FrameUniforms descriptor set layout.");
     }
 
     /// <summary>
@@ -78,7 +78,7 @@ internal sealed unsafe class CommonUBOManager : IDisposable
         };
 
         VulkanHelper.Check(_context.Vk.CreateDescriptorPool(_context.Device, in poolInfo, null, out _descriptorPool),
-            "Failed to create CommonUBO descriptor pool.");
+            "Failed to create FrameUniforms descriptor pool.");
     }
 
     /// <summary>
@@ -86,7 +86,7 @@ internal sealed unsafe class CommonUBOManager : IDisposable
     /// </summary>
     private void CreateBuffersAndSets()
     {
-        ulong uboSize = (ulong)sizeof(CommonUBOData);
+        ulong uboSize = (ulong)sizeof(FrameUniforms);
         DescriptorSetLayout* layouts = stackalloc DescriptorSetLayout[VulkanSwapchain.MaxFramesInFlight];
 
         for (int i = 0; i < VulkanSwapchain.MaxFramesInFlight; i++)
@@ -107,7 +107,7 @@ internal sealed unsafe class CommonUBOManager : IDisposable
         fixed (DescriptorSet* pSets = _descriptorSets)
         {
             VulkanHelper.Check(_context.Vk.AllocateDescriptorSets(_context.Device, in allocInfo, pSets),
-                "Failed to allocate CommonUBO descriptor sets.");
+                "Failed to allocate FrameUniforms descriptor sets.");
         }
 
         for (int i = 0; i < VulkanSwapchain.MaxFramesInFlight; i++)
@@ -135,11 +135,11 @@ internal sealed unsafe class CommonUBOManager : IDisposable
     }
 
     /// <summary>
-    /// Uploads camera and timing values into the uniform buffer assigned to the current frame in flight.
+    /// Uploads frame uniform values into the uniform buffer assigned to the current frame in flight.
     /// </summary>
-    public void Update(int frameIndex, in CommonUBOData data)
+    public void Update(int frameIndex, in FrameUniforms uniforms)
     {
-        ReadOnlySpan<CommonUBOData> span = new(in data);
+        ReadOnlySpan<FrameUniforms> span = new(in uniforms);
         _uboBuffers[frameIndex].SetData(span);
     }
 

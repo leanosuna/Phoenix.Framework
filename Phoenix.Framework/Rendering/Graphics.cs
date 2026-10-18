@@ -28,9 +28,9 @@ public sealed class Graphics : IDisposable
     public VulkanSwapchain Swapchain { get; private set; } = default!;
 
     /// <summary>
-    /// Gets the CommonUBO uniform buffer manager.
+    /// Gets the FrameUniforms uniform buffer manager.
     /// </summary>
-    internal CommonUBOManager CommonUbo { get; private set; } = default!;
+    internal FrameUniformsManager FrameUniformsManager { get; private set; } = default!;
 
     /// <summary>
     /// Gets the global bindless texture manager for Set 1.
@@ -53,9 +53,9 @@ public sealed class Graphics : IDisposable
     public RenderViewport Viewport { get; private set; } = default!;
 
     /// <summary>
-    /// Gets the default CommonUBO descriptor set layout.
+    /// Gets the default FrameUniforms descriptor set layout.
     /// </summary>
-    public DescriptorSetLayout CommonUBOLayout => CommonUbo.DescriptorSetLayout;
+    public DescriptorSetLayout FrameUniformsLayout => FrameUniformsManager.DescriptorSetLayout;
 
     /// <summary>
     /// Gets the bindless textures descriptor set layout.
@@ -63,7 +63,7 @@ public sealed class Graphics : IDisposable
     public DescriptorSetLayout BindlessLayout => BindlessManager.DescriptorSetLayout;
 
     /// <summary>
-    /// Gets the descriptor set layout for skeletal animation bone uniform buffers (Set 2).
+    /// Gets the descriptor set layout for skeletal animation bone uniform buffers (Set 3).
     /// </summary>
     public DescriptorSetLayout BoneLayout { get; private set; }
 
@@ -113,12 +113,12 @@ public sealed class Graphics : IDisposable
     /// <summary>
     /// Initializes graphics subsystems, Vulkan context, swapchain, uniform buffers, bindless manager, and viewport.
     /// </summary>
-    internal Graphics(PhoenixGame game)
+    internal Graphics(PhoenixGame game, bool enableValidation = false)
     {
         _game = game;
-        Context = new VulkanContext(game.Window, game.Window.Title);
+        Context = new VulkanContext(game.Window, game.Window.Title, enableValidation);
         Swapchain = new VulkanSwapchain(Context, game.Window);
-        CommonUbo = new CommonUBOManager(Context);
+        FrameUniformsManager = new FrameUniformsManager(Context);
         BindlessManager = new BindlessManager(Context);
         BoneLayout = CreateBoneLayout();
         IndirectMetadataLayout = CreateStorageBufferLayout(ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 0);
@@ -216,26 +216,27 @@ public sealed class Graphics : IDisposable
 
     /// <summary>
     /// Creates a graphics pipeline configured for dynamic rendering and depth testing.
-    /// Automatically injects Set 0 (CommonUBO) and Set 1 (Bindless) descriptor set layouts if not present.
+    /// Automatically injects Set 0 (FrameUniforms) and Set 1 (Bindless) descriptor set layouts if not present.
     /// </summary>
     public VulkanPipeline CreatePipeline(VulkanPipelineDescription description)
     {
         var layouts = description.DescriptorSetLayouts;
-        if (layouts.Length == 0)
+        List<DescriptorSetLayout> list = layouts.Length == 0 ? [] : [.. layouts];
+
+        if (list.Count < 1 || list[0].Handle != FrameUniformsManager.DescriptorSetLayout.Handle)
+            list.Insert(0, FrameUniformsManager.DescriptorSetLayout);
+        if (list.Count < 2 || list[1].Handle != BindlessManager.DescriptorSetLayout.Handle)
+            list.Insert(1, BindlessManager.DescriptorSetLayout);
+
+        // Set 2 is reserved for submesh metadata or custom pass storage buffers.
+        // Set 3 is reserved for skeletal animation bone uniform buffers.
+        // If BoneLayout was placed at index 2 without a Set 2 layout, insert IndirectMetadataLayout at index 2.
+        if (list.Count > 2 && list[2].Handle == BoneLayout.Handle)
         {
-            layouts = [CommonUbo.DescriptorSetLayout, BindlessManager.DescriptorSetLayout];
-        }
-        else
-        {
-            List<DescriptorSetLayout> list = [.. layouts];
-            if (list.Count < 1 || list[0].Handle != CommonUbo.DescriptorSetLayout.Handle)
-                list.Insert(0, CommonUbo.DescriptorSetLayout);
-            if (list.Count < 2 || list[1].Handle != BindlessManager.DescriptorSetLayout.Handle)
-                list.Insert(1, BindlessManager.DescriptorSetLayout);
-            layouts = [.. list];
+            list.Insert(2, IndirectMetadataLayout);
         }
 
-        var descWithUbo = description with { DescriptorSetLayouts = layouts };
+        var descWithUbo = description with { DescriptorSetLayouts = [.. list] };
         return new VulkanPipeline(Context, descWithUbo);
     }
 
@@ -249,10 +250,11 @@ public sealed class Graphics : IDisposable
 
     /// <summary>
     /// Creates a GPU storage buffer (SSBO) for compute shaders or indirect drawing.
+    /// When hostVisible is true, the buffer is mapped for low-latency per-frame CPU updates without staging.
     /// </summary>
-    public VulkanStorageBuffer CreateStorageBuffer(ulong size)
+    public VulkanStorageBuffer CreateStorageBuffer(ulong size, bool hostVisible = false)
     {
-        return new VulkanStorageBuffer(Context, size);
+        return new VulkanStorageBuffer(Context, size, hostVisible);
     }
 
 
@@ -476,7 +478,7 @@ public sealed class Graphics : IDisposable
 
         SceneRenderTarget?.Dispose();
         BindlessManager.Dispose();
-        CommonUbo.Dispose();
+        FrameUniformsManager.Dispose();
         Swapchain.Dispose();
         Context.Dispose();
 

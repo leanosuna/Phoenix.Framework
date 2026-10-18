@@ -55,6 +55,7 @@ public sealed class BCnEncoderTextureCompressor : ITextureCompressor
     private static CompressionFormat MapFormat(TextureCompressionFormat format) => format switch
     {
         TextureCompressionFormat.BC1 => CompressionFormat.Bc1,
+        TextureCompressionFormat.BC2 => CompressionFormat.Bc2,
         TextureCompressionFormat.BC3 => CompressionFormat.Bc3,
         TextureCompressionFormat.BC4 => CompressionFormat.Bc4,
         TextureCompressionFormat.BC5 => CompressionFormat.Bc5,

@@ -15,7 +15,7 @@ Run()
  └── Window.Create()
       └── Window.Load       → InternalLoad()
            ├── Log initialized
-           ├── Graphics created (VulkanContext, VulkanSwapchain, CommonUBO, BindlessManager)
+           ├── Graphics created (VulkanContext, VulkanSwapchain, FrameUniforms, BindlessManager)
            ├── Input created
            ├── AssetLoader initialized
            ├── SoundManager initialized
@@ -35,7 +35,7 @@ Run()
       └── Window.Render     → InternalRender()
            ├── Metrics.ProcessRender(dt)
            ├── Swapchain.AcquireNextImage()
-           ├── CommonUBO updated (camera matrices, time, resolution)
+           ├── FrameUniforms updated (camera matrices, time, resolution)
            ├── Swapchain.BeginCommandBuffer()
            ├── RenderContext prepared with active command buffer
            ├── If not halted:
@@ -133,7 +133,7 @@ Pressing F11 toggles render halt. When halted:
 | `FramebufferWidth` / `FramebufferHeight` | `int` | Shortcuts for framebuffer pixel dimensions |
 | `Graphics` | `Graphics` | Graphics engine managing Vulkan devices, swapchain, and pipelines |
 | `Input` | `Input` | Keyboard and mouse edge-detection helper |
-| `Camera` | `Camera?` | Active camera whose matrices are bound to `CommonUBO` |
+| `Camera` | `Camera?` | Active camera whose matrices are bound to `FrameUniforms` |
 | `Metrics` | `Metrics` | Frame time, FPS, and UPS sampling counters |
 | `UI` | `UI` | ImGui overlay and text drawing helper |
 | `Gizmos` | `Gizmos` | Debug line, box, sphere, and frustum drawer |

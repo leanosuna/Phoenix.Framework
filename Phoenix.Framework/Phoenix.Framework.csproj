@@ -43,6 +43,7 @@
     <PackageReference Include="YellowDogMan.Compressonator.NET" Version="1.1.2" />
     <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
     <PackageReference Include="Box3D.NET" Version="0.4.0" />
+    <PackageReference Include="piko.VulkanMemoryAllocator.Silk.NET" Version="0.0.6" />
   </ItemGroup>
 
   <ItemGroup>

@@ -39,7 +39,7 @@ Phoenix organizes descriptor sets into standardized frequencies:
 
 | Set | Name | Lifetime | Contents |
 |---|---|---|---|
-| **Set 0** | `CommonUBO` | Per frame | Camera matrices, camera position, screen resolution, time, delta time |
+| **Set 0** | `FrameUniforms` | Per frame | Camera matrices, camera position, screen resolution, time, delta time |
 | **Set 1** | `BindlessManager` | Global | Global array of 4096 or 16384 sampled images (`uTextures[]`) |
 | **Set 2** | `BoneLayout` | Per model | Up to 128 bone transformation matrices for skeletal animation |
 | **Set 3** | Custom / SSBO | As needed | Submesh metadata for Multi-Draw Indirect or custom storage buffers |
@@ -48,7 +48,7 @@ In GLSL shaders:
 
 ```glsl
 // Set 0: Common frame data
-layout(set = 0, binding = 0) uniform CommonUBO {
+layout(set = 0, binding = 0) uniform FrameUniforms {
     mat4 uView;
     mat4 uProjection;
     mat4 uViewProjection;

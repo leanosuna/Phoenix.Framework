@@ -4,6 +4,7 @@ using Silk.NET.Vulkan;
 using Silk.NET.Windowing;
 using System.Numerics;
 using VkSemaphore = Silk.NET.Vulkan.Semaphore;
+using piko.VulkanMemoryAllocator;
 
 namespace Phoenix.Framework.Rendering.Vulkan;
 
@@ -22,6 +23,7 @@ public sealed unsafe class VulkanSwapchain : IDisposable
     private ImageView[] _imageViews = [];
     private Image _depthImage;
     private DeviceMemory _depthImageMemory;
+    private Allocation _depthImageAllocation;
     private ImageView _depthImageView;
     private Format _depthFormat;
     private CommandPool _commandPool;
@@ -197,23 +199,20 @@ public sealed unsafe class VulkanSwapchain : IDisposable
             Samples = SampleCountFlags.Count1Bit
         };
 
-        VulkanHelper.Check(_context.Vk.CreateImage(_context.Device, in imageInfo, null, out _depthImage),
-            "Failed to create depth image.");
-
-        _context.Vk.GetImageMemoryRequirements(_context.Device, _depthImage, out var memReqs);
-
-        MemoryAllocateInfo allocInfo = new()
+        AllocationCreateInfo allocCreateInfo = new()
         {
-            SType = StructureType.MemoryAllocateInfo,
-            AllocationSize = memReqs.Size,
-            MemoryTypeIndex = _context.FindMemoryType(memReqs.MemoryTypeBits, MemoryPropertyFlags.DeviceLocalBit)
+            Usage = MemoryUsage.AutoPreferDevice
         };
 
-        VulkanHelper.Check(_context.Vk.AllocateMemory(_context.Device, in allocInfo, null, out _depthImageMemory),
-            "Failed to allocate depth image memory.");
-
-        VulkanHelper.Check(_context.Vk.BindImageMemory(_context.Device, _depthImage, _depthImageMemory, 0),
-            "Failed to bind depth image memory.");
+        Image img;
+        Allocation alloc;
+        AllocationInfo allocDetails;
+        VulkanHelper.Check(
+            VMA.CreateImage(_context.Allocator, &imageInfo, &allocCreateInfo, &img, &alloc, &allocDetails),
+            "Failed to create depth image via VMA.");
+        _depthImage = img;
+        _depthImageAllocation = alloc;
+        _depthImageMemory = allocDetails.DeviceMemory;
 
         ImageViewCreateInfo viewInfo = new()
         {
@@ -239,16 +238,12 @@ public sealed unsafe class VulkanSwapchain : IDisposable
             _depthImageView = default;
         }
 
-        if (_depthImageMemory.Handle != 0)
-        {
-            _context.Vk.FreeMemory(_context.Device, _depthImageMemory, null);
-            _depthImageMemory = default;
-        }
-
         if (_depthImage.Handle != 0)
         {
-            _context.Vk.DestroyImage(_context.Device, _depthImage, null);
+            VMA.DestroyImage(_context.Allocator, _depthImage, _depthImageAllocation);
             _depthImage = default;
+            _depthImageAllocation = default;
+            _depthImageMemory = default;
         }
     }
 

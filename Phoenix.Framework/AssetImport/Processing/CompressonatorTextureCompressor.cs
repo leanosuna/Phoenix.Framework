@@ -191,6 +191,7 @@ public sealed class CompressonatorTextureCompressor : ITextureCompressor
     private static CMP_FORMAT MapFormat(TextureCompressionFormat format) => format switch
     {
         TextureCompressionFormat.BC1 => CMP_FORMAT.BC1,
+        TextureCompressionFormat.BC2 => CMP_FORMAT.BC2,
         TextureCompressionFormat.BC3 => CMP_FORMAT.BC3,
         TextureCompressionFormat.BC4 => CMP_FORMAT.BC4,
         TextureCompressionFormat.BC5 => CMP_FORMAT.BC5,

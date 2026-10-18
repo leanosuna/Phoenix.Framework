@@ -2,7 +2,7 @@
 
 Namespace: `Phoenix.Framework.Cameras`
 
-Phoenix provides a hierarchy of camera classes for 3D viewport control. Cameras feed `View` and `Projection` matrices into `CommonUBO` (Set 0) every frame.
+Phoenix provides a hierarchy of camera classes for 3D viewport control. Cameras feed `View` and `Projection` matrices into `FrameUniforms` (Set 0) every frame.
 
 ---
 
@@ -108,12 +108,12 @@ This method:
 
 ---
 
-## Integration with CommonUBO
+## Integration with FrameUniforms
 
-The camera view and projection matrices are uploaded to Set 0 (`CommonUBO`) automatically before each frame render. In your GLSL shaders:
+The camera view and projection matrices are uploaded to Set 0 (`FrameUniforms`) automatically before each frame render. In your GLSL shaders:
 
 ```glsl
-layout(set = 0, binding = 0) uniform CommonUBO {
+layout(set = 0, binding = 0) uniform FrameUniforms {
     mat4 uView;
     mat4 uProjection;
     mat4 uViewProjection;

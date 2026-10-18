@@ -29,12 +29,22 @@ public sealed unsafe class VulkanStorageBuffer : IDisposable
     public ulong Size => _size;
 
     /// <summary>
-    /// Allocates a device-local storage buffer capable of compute shader access and transfer operations.
+    /// Gets whether the storage buffer is host-visible and persistently mapped.
     /// </summary>
-    public VulkanStorageBuffer(VulkanContext context, ulong size)
+    public bool IsHostVisible => _deviceBuffer.MappedData != null;
+
+    /// <summary>
+    /// Allocates a storage buffer capable of compute shader access, indirect drawing, and data transfers.
+    /// When hostVisible is true, the buffer is allocated in host-accessible memory for low-latency per-frame CPU updates without staging.
+    /// </summary>
+    public VulkanStorageBuffer(VulkanContext context, ulong size, bool hostVisible = false)
     {
         _context = context;
         _size = size;
+
+        var memoryFlags = hostVisible
+            ? MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit
+            : MemoryPropertyFlags.DeviceLocalBit;
 
         _deviceBuffer = new VulkanBuffer(
             context,
@@ -43,72 +53,25 @@ public sealed unsafe class VulkanStorageBuffer : IDisposable
             BufferUsageFlags.TransferDstBit |
             BufferUsageFlags.TransferSrcBit |
             BufferUsageFlags.IndirectBufferBit,
-            MemoryPropertyFlags.DeviceLocalBit);
+            memoryFlags);
     }
 
     /// <summary>
-    /// Uploads CPU data to the GPU storage buffer using a staging buffer.
+    /// Uploads CPU data to the GPU storage buffer.
+    /// When host-visible, writes directly to mapped memory without GPU pipeline stalls.
+    /// When device-local, executes a staging buffer transfer.
     /// </summary>
     public void SetData<T>(ReadOnlySpan<T> data, ulong offset = 0) where T : unmanaged
     {
-        ulong byteCount = (ulong)(data.Length * sizeof(T));
-        if (offset + byteCount > _size)
-            throw new ArgumentOutOfRangeException(nameof(data), "Data size exceeds storage buffer capacity.");
-
-        using var staging = new VulkanBuffer(
-            _context,
-            byteCount,
-            BufferUsageFlags.TransferSrcBit,
-            MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
-
-        staging.SetData(data);
-
-        var cmd = _context.BeginSingleTimeCommands();
-
-        BufferCopy copyRegion = new()
-        {
-            SrcOffset = 0,
-            DstOffset = offset,
-            Size = byteCount
-        };
-
-        _context.Vk.CmdCopyBuffer(cmd, staging.Buffer, _deviceBuffer.Buffer, 1, in copyRegion);
-
-        _context.EndSingleTimeCommands(cmd);
+        _deviceBuffer.SetData(data, offset);
     }
 
     /// <summary>
-    /// Downloads GPU data from the storage buffer into CPU memory using a staging buffer.
+    /// Downloads GPU data from the storage buffer into CPU memory.
     /// </summary>
     public void GetData<T>(Span<T> destination, ulong offset = 0) where T : unmanaged
     {
-        ulong byteCount = (ulong)(destination.Length * sizeof(T));
-        if (offset + byteCount > _size)
-            throw new ArgumentOutOfRangeException(nameof(destination), "Destination size exceeds storage buffer capacity.");
-
-        using var staging = new VulkanBuffer(
-            _context,
-            byteCount,
-            BufferUsageFlags.TransferDstBit,
-            MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
-
-        var cmd = _context.BeginSingleTimeCommands();
-
-        BufferCopy copyRegion = new()
-        {
-            SrcOffset = offset,
-            DstOffset = 0,
-            Size = byteCount
-        };
-
-        _context.Vk.CmdCopyBuffer(cmd, _deviceBuffer.Buffer, staging.Buffer, 1, in copyRegion);
-
-        _context.EndSingleTimeCommands(cmd);
-
-        fixed (T* pDest = destination)
-        {
-            System.Buffer.MemoryCopy(staging.MappedData, pDest, byteCount, byteCount);
-        }
+        _deviceBuffer.GetData(destination, offset);
     }
 
     /// <summary>

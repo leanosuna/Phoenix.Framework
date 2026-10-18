@@ -1,5 +1,6 @@
 using Silk.NET.Vulkan;
 using VkImage = Silk.NET.Vulkan.Image;
+using piko.VulkanMemoryAllocator;
 
 namespace Phoenix.Framework.Rendering.Vulkan;
 
@@ -20,6 +21,7 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
     private VulkanTexture[] _colorTextures = [];
     private VkImage _depthImage;
     private DeviceMemory _depthMemory;
+    private Allocation _depthAllocation;
     private ImageView _depthImageView;
     private bool _disposed;
 
@@ -132,7 +134,7 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
     public uint GetTextureId(int index) => _colorTextures[index].TextureId;
 
     /// <summary>
-    /// Reallocates GPU color and depth images at new dimensions.
+    /// Reallocates GPU color and depth images at new dimensions while preserving bindless texture slot IDs.
     /// </summary>
     public void Resize(uint width, uint height)
     {
@@ -144,8 +146,16 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
         _width = width;
         _height = height;
 
-        DestroyResources();
-        CreateResources();
+        for (int i = 0; i < _colorTextures.Length; i++)
+        {
+            _colorTextures[i].Resize(width, height);
+        }
+
+        if (_hasDepth)
+        {
+            DestroyDepthBuffer();
+            CreateDepthBuffer();
+        }
     }
 
     private void CreateResources()
@@ -191,23 +201,20 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
             Samples = SampleCountFlags.Count1Bit
         };
 
-        VulkanHelper.Check(_context.Vk.CreateImage(_context.Device, in imageInfo, null, out _depthImage),
-            "Failed to create depth image for render target.");
-
-        _context.Vk.GetImageMemoryRequirements(_context.Device, _depthImage, out var memReqs);
-
-        MemoryAllocateInfo allocInfo = new()
+        AllocationCreateInfo allocCreateInfo = new()
         {
-            SType = StructureType.MemoryAllocateInfo,
-            AllocationSize = memReqs.Size,
-            MemoryTypeIndex = _context.FindMemoryType(memReqs.MemoryTypeBits, MemoryPropertyFlags.DeviceLocalBit)
+            Usage = MemoryUsage.AutoPreferDevice
         };
 
-        VulkanHelper.Check(_context.Vk.AllocateMemory(_context.Device, in allocInfo, null, out _depthMemory),
-            "Failed to allocate depth image memory for render target.");
-
-        VulkanHelper.Check(_context.Vk.BindImageMemory(_context.Device, _depthImage, _depthMemory, 0),
-            "Failed to bind depth image memory for render target.");
+        Image img;
+        Allocation alloc;
+        AllocationInfo allocDetails;
+        VulkanHelper.Check(
+            VMA.CreateImage(_context.Allocator, &imageInfo, &allocCreateInfo, &img, &alloc, &allocDetails),
+            "Failed to create depth image for render target via VMA.");
+        _depthImage = img;
+        _depthAllocation = alloc;
+        _depthMemory = allocDetails.DeviceMemory;
 
         ImageViewCreateInfo viewInfo = new()
         {
@@ -222,14 +229,8 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
             "Failed to create depth image view for render target.");
     }
 
-    private void DestroyResources()
+    private void DestroyDepthBuffer()
     {
-        for (int i = 0; i < _colorTextures.Length; i++)
-        {
-            _colorTextures[i]?.Dispose();
-        }
-        _colorTextures = [];
-
         if (_depthImageView.Handle != 0)
         {
             _context.Vk.DestroyImageView(_context.Device, _depthImageView, null);
@@ -238,15 +239,22 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
 
         if (_depthImage.Handle != 0)
         {
-            _context.Vk.DestroyImage(_context.Device, _depthImage, null);
+            VMA.DestroyImage(_context.Allocator, _depthImage, _depthAllocation);
             _depthImage = default;
-        }
-
-        if (_depthMemory.Handle != 0)
-        {
-            _context.Vk.FreeMemory(_context.Device, _depthMemory, null);
+            _depthAllocation = default;
             _depthMemory = default;
         }
+    }
+
+    private void DestroyResources()
+    {
+        for (int i = 0; i < _colorTextures.Length; i++)
+        {
+            _colorTextures[i]?.Dispose();
+        }
+        _colorTextures = [];
+
+        DestroyDepthBuffer();
     }
 
     public void Dispose()

@@ -13,7 +13,7 @@ public sealed unsafe class RenderContext
     private readonly Graphics _graphics;
     private readonly VulkanContext _context;
     private readonly VulkanSwapchain _swapchain;
-    private readonly CommonUBOManager _commonUbo;
+    private readonly FrameUniformsManager _frameUniformsManager;
     private readonly BindlessManager _bindlessManager;
     private CommandBuffer _commandBuffer;
     private uint _imageIndex;
@@ -64,7 +64,7 @@ public sealed unsafe class RenderContext
         _graphics = graphics;
         _context = graphics.Context;
         _swapchain = graphics.Swapchain;
-        _commonUbo = graphics.CommonUbo;
+        _frameUniformsManager = graphics.FrameUniformsManager;
         _bindlessManager = graphics.BindlessManager;
     }
 
@@ -787,26 +787,33 @@ public sealed unsafe class RenderContext
     }
 
     /// <summary>
-    /// Binds a graphics pipeline and automatically binds CommonUBO to Set 0 and bindless textures to Set 1.
+    /// Binds default descriptor sets (Set 0 for FrameUniforms and Set 1 for bindless textures) based on the pipeline's layout.
     /// </summary>
-    public void BindPipeline(VulkanPipeline pipeline)
+    public void BindDefaultDescriptorSets(VulkanPipeline pipeline)
     {
-        _context.Vk.CmdBindPipeline(_commandBuffer, pipeline.BindPoint, pipeline.Pipeline);
-
         if (pipeline.DescriptorSetCount >= 2)
         {
             DescriptorSet* sets = stackalloc DescriptorSet[]
             {
-                _commonUbo.GetDescriptorSet(_currentFrame),
+                _frameUniformsManager.GetDescriptorSet(_currentFrame),
                 _bindlessManager.DescriptorSet
             };
             _context.Vk.CmdBindDescriptorSets(_commandBuffer, pipeline.BindPoint, pipeline.Layout, 0, 2, sets, 0, null);
         }
         else if (pipeline.DescriptorSetCount == 1)
         {
-            var uboSet = _commonUbo.GetDescriptorSet(_currentFrame);
+            var uboSet = _frameUniformsManager.GetDescriptorSet(_currentFrame);
             _context.Vk.CmdBindDescriptorSets(_commandBuffer, pipeline.BindPoint, pipeline.Layout, 0, 1, &uboSet, 0, null);
         }
+    }
+
+    /// <summary>
+    /// Binds a graphics pipeline and automatically binds default descriptor sets (Set 0 for FrameUniforms, Set 1 for bindless textures).
+    /// </summary>
+    public void BindPipeline(VulkanPipeline pipeline)
+    {
+        _context.Vk.CmdBindPipeline(_commandBuffer, pipeline.BindPoint, pipeline.Pipeline);
+        BindDefaultDescriptorSets(pipeline);
     }
 
     /// <summary>

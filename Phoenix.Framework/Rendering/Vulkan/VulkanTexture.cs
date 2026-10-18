@@ -5,6 +5,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using VkImage = Silk.NET.Vulkan.Image;
+using piko.VulkanMemoryAllocator;
 
 namespace Phoenix.Framework.Rendering.Vulkan;
 
@@ -18,9 +19,10 @@ public sealed unsafe class VulkanTexture : IDisposable
     private readonly BindlessManager _bindlessManager;
     private VkImage _image;
     private DeviceMemory _memory;
+    private Allocation _allocation;
     private ImageView _imageView;
-    private readonly uint _width;
-    private readonly uint _height;
+    private uint _width;
+    private uint _height;
     private readonly uint _mipLevels;
     private readonly Format _format;
     private readonly uint _textureId;
@@ -31,6 +33,7 @@ public sealed unsafe class VulkanTexture : IDisposable
     public bool IsDisposed => _disposed;
     public VkImage Image => _image;
     public DeviceMemory Memory => _memory;
+    public Allocation Allocation => _allocation;
     public ImageView ImageView => _imageView;
     public Sampler Sampler => _sampler;
     public uint Width => _width;
@@ -118,7 +121,7 @@ public sealed unsafe class VulkanTexture : IDisposable
 
     /// <summary>
     /// Creates a GPU-resident offscreen render target texture without initial pixel staging upload.
-    /// Allocates optimal device-local memory and registers into the global bindless manager.
+    /// Allocates optimal device-local memory via VMA and registers into the global bindless manager.
     /// </summary>
     public VulkanTexture(VulkanContext context, BindlessManager bindless, uint width, uint height,
         Format format, ImageUsageFlags usageFlags, SamplerDescription? samplerDesc = null)
@@ -147,23 +150,20 @@ public sealed unsafe class VulkanTexture : IDisposable
             Samples = SampleCountFlags.Count1Bit
         };
 
-        VulkanHelper.Check(_context.Vk.CreateImage(_context.Device, in imageInfo, null, out _image),
-            "Failed to create Vulkan render target image.");
-
-        _context.Vk.GetImageMemoryRequirements(_context.Device, _image, out var memReqs);
-
-        MemoryAllocateInfo allocInfo = new()
+        AllocationCreateInfo allocCreateInfo = new()
         {
-            SType = StructureType.MemoryAllocateInfo,
-            AllocationSize = memReqs.Size,
-            MemoryTypeIndex = _context.FindMemoryType(memReqs.MemoryTypeBits, MemoryPropertyFlags.DeviceLocalBit)
+            Usage = MemoryUsage.AutoPreferDevice
         };
 
-        VulkanHelper.Check(_context.Vk.AllocateMemory(_context.Device, in allocInfo, null, out _memory),
-            "Failed to allocate Vulkan render target image memory.");
-
-        VulkanHelper.Check(_context.Vk.BindImageMemory(_context.Device, _image, _memory, 0),
-            "Failed to bind Vulkan render target image memory.");
+        Silk.NET.Vulkan.Image img;
+        Allocation alloc;
+        AllocationInfo allocDetails;
+        VulkanHelper.Check(
+            VMA.CreateImage(_context.Allocator, &imageInfo, &allocCreateInfo, &img, &alloc, &allocDetails),
+            "Failed to create Vulkan render target image via VMA.");
+        _image = img;
+        _allocation = alloc;
+        _memory = allocDetails.DeviceMemory;
 
         CreateImageView(format, 1);
 
@@ -198,7 +198,7 @@ public sealed unsafe class VulkanTexture : IDisposable
 
 
     /// <summary>
-    /// Allocates optimal GPU device-local memory and creates the VkImage handle.
+    /// Allocates optimal GPU device-local memory via VMA and creates the VkImage handle.
     /// </summary>
     private void CreateImage(int width, int height, Format format, uint mipLevels)
     {
@@ -221,23 +221,20 @@ public sealed unsafe class VulkanTexture : IDisposable
             Samples = SampleCountFlags.Count1Bit
         };
 
-        VulkanHelper.Check(_context.Vk.CreateImage(_context.Device, in imageInfo, null, out _image),
-            "Failed to create Vulkan texture image.");
-
-        _context.Vk.GetImageMemoryRequirements(_context.Device, _image, out var memReqs);
-
-        MemoryAllocateInfo allocInfo = new()
+        AllocationCreateInfo allocCreateInfo = new()
         {
-            SType = StructureType.MemoryAllocateInfo,
-            AllocationSize = memReqs.Size,
-            MemoryTypeIndex = _context.FindMemoryType(memReqs.MemoryTypeBits, MemoryPropertyFlags.DeviceLocalBit)
+            Usage = MemoryUsage.AutoPreferDevice
         };
 
-        VulkanHelper.Check(_context.Vk.AllocateMemory(_context.Device, in allocInfo, null, out _memory),
-            "Failed to allocate Vulkan texture image memory.");
-
-        VulkanHelper.Check(_context.Vk.BindImageMemory(_context.Device, _image, _memory, 0),
-            "Failed to bind Vulkan texture image memory.");
+        Silk.NET.Vulkan.Image img;
+        Allocation alloc;
+        AllocationInfo allocDetails;
+        VulkanHelper.Check(
+            VMA.CreateImage(_context.Allocator, &imageInfo, &allocCreateInfo, &img, &alloc, &allocDetails),
+            "Failed to create Vulkan texture image via VMA.");
+        _image = img;
+        _allocation = alloc;
+        _memory = allocDetails.DeviceMemory;
     }
 
     /// <summary>
@@ -251,7 +248,8 @@ public sealed unsafe class VulkanTexture : IDisposable
 
         stagingBuffer.SetData(pixelData);
 
-        var cmd = _context.BeginSingleTimeCommands();
+        bool useTransferQueue = _mipLevels == 1;
+        var cmd = useTransferQueue ? _context.BeginTransferCommands() : _context.BeginSingleTimeCommands();
 
         ImageMemoryBarrier2 barrierToDst = new()
         {
@@ -316,11 +314,15 @@ public sealed unsafe class VulkanTexture : IDisposable
             _context.Vk.CmdPipelineBarrier2(cmd, in depToShader);
         }
 
-        _context.EndSingleTimeCommands(cmd);
+        if (useTransferQueue)
+            _context.EndTransferCommands(cmd);
+        else
+            _context.EndSingleTimeCommands(cmd);
     }
 
     /// <summary>
     /// Uploads all pre-compressed mipmap levels from a single contiguous staging buffer and transitions to ShaderReadOnlyOptimal.
+    /// Utilizes the dedicated transfer queue for background asset upload without stalling the render thread.
     /// </summary>
     private void UploadCompressedMips(List<CompressedMipLevel> mips)
     {
@@ -355,7 +357,7 @@ public sealed unsafe class VulkanTexture : IDisposable
             currentOffset += (ulong)mip.Data.Length;
         }
 
-        var cmd = _context.BeginSingleTimeCommands();
+        var cmd = _context.BeginTransferCommands();
 
         ImageMemoryBarrier2 barrierToDst = new()
         {
@@ -406,7 +408,7 @@ public sealed unsafe class VulkanTexture : IDisposable
 
         _context.Vk.CmdPipelineBarrier2(cmd, in depToShader);
 
-        _context.EndSingleTimeCommands(cmd);
+        _context.EndTransferCommands(cmd);
     }
 
     /// <summary>
@@ -415,6 +417,7 @@ public sealed unsafe class VulkanTexture : IDisposable
     public static Format MapFormat(TextureCompressionFormat format, bool isSRgb) => format switch
     {
         TextureCompressionFormat.BC1 => isSRgb ? Format.BC1RgbaSrgbBlock : Format.BC1RgbaUnormBlock,
+        TextureCompressionFormat.BC2 => isSRgb ? Format.BC2SrgbBlock : Format.BC2UnormBlock,
         TextureCompressionFormat.BC3 => isSRgb ? Format.BC3SrgbBlock : Format.BC3UnormBlock,
         TextureCompressionFormat.BC4 => Format.BC4UnormBlock,
         TextureCompressionFormat.BC5 => Format.BC5UnormBlock,
@@ -689,6 +692,72 @@ public sealed unsafe class VulkanTexture : IDisposable
     }
 
     /// <summary>
+    /// Reallocates GPU image and view at new dimensions while preserving the existing bindless texture slot ID.
+    /// </summary>
+    public void Resize(uint width, uint height)
+    {
+        if (width == 0 || height == 0)
+            return;
+        if (_width == width && _height == height)
+            return;
+
+        _width = width;
+        _height = height;
+
+        if (_imageView.Handle != 0)
+        {
+            _context.Vk.DestroyImageView(_context.Device, _imageView, null);
+            _imageView = default;
+        }
+
+        if (_image.Handle != 0)
+        {
+            VMA.DestroyImage(_context.Allocator, _image, _allocation);
+            _image = default;
+            _allocation = default;
+            _memory = default;
+        }
+
+        ImageUsageFlags usage = ImageUsageFlags.ColorAttachmentBit |
+                                ImageUsageFlags.SampledBit |
+                                ImageUsageFlags.TransferSrcBit |
+                                ImageUsageFlags.TransferDstBit;
+
+        ImageCreateInfo imageInfo = new()
+        {
+            SType = StructureType.ImageCreateInfo,
+            ImageType = ImageType.Type2D,
+            Extent = new Extent3D(width, height, 1),
+            MipLevels = 1,
+            ArrayLayers = 1,
+            Format = _format,
+            Tiling = ImageTiling.Optimal,
+            InitialLayout = ImageLayout.Undefined,
+            Usage = usage,
+            SharingMode = SharingMode.Exclusive,
+            Samples = SampleCountFlags.Count1Bit
+        };
+
+        AllocationCreateInfo allocCreateInfo = new()
+        {
+            Usage = MemoryUsage.AutoPreferDevice
+        };
+
+        Silk.NET.Vulkan.Image img;
+        Allocation alloc;
+        AllocationInfo allocDetails;
+        VulkanHelper.Check(
+            VMA.CreateImage(_context.Allocator, &imageInfo, &allocCreateInfo, &img, &alloc, &allocDetails),
+            "Failed to resize Vulkan texture image via VMA.");
+        _image = img;
+        _allocation = alloc;
+        _memory = allocDetails.DeviceMemory;
+
+        CreateImageView(_format, 1);
+        _bindlessManager.UpdateDescriptor(_textureId, _imageView, _sampler);
+    }
+
+    /// <summary>
     /// Releases the bindless slot allocation, image view, image, and allocated GPU memory.
     /// </summary>
     public void Dispose()
@@ -709,13 +778,9 @@ public sealed unsafe class VulkanTexture : IDisposable
 
         if (_image.Handle != 0)
         {
-            _context.Vk.DestroyImage(_context.Device, _image, null);
+            VMA.DestroyImage(_context.Allocator, _image, _allocation);
             _image = default;
-        }
-
-        if (_memory.Handle != 0)
-        {
-            _context.Vk.FreeMemory(_context.Device, _memory, null);
+            _allocation = default;
             _memory = default;
         }
 
