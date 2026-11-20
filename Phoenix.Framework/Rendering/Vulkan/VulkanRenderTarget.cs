@@ -23,7 +23,11 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
     private DeviceMemory _depthMemory;
     private Allocation _depthAllocation;
     private ImageView _depthImageView;
+    private uint _depthTextureId;
+    private Sampler _depthSampler;
     private bool _disposed;
+
+    internal float ViewportScale { get; set; } = 1.0f;
 
     /// <summary>
     /// Gets width in pixels.
@@ -46,19 +50,19 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
     public int ColorAttachmentCount => _colorTextures.Length;
 
     /// <summary>
-    /// Gets the primary color texture format.
+    /// Gets the primary color texture format, or Format.Undefined if depth-only.
     /// </summary>
-    public Format ColorFormat => _colorFormats[0];
+    public Format ColorFormat => _colorFormats.Length > 0 ? _colorFormats[0] : Format.Undefined;
 
     /// <summary>
-    /// Gets the primary color texture (attachment 0).
+    /// Gets the primary color texture (attachment 0), or null if depth-only.
     /// </summary>
-    public VulkanTexture ColorTexture => _colorTextures[0];
+    public VulkanTexture? ColorTexture => _colorTextures.Length > 0 ? _colorTextures[0] : null;
 
     /// <summary>
-    /// Gets bindless texture slot ID of the primary color texture.
+    /// Gets bindless texture slot ID of the primary color texture, or depth texture if depth-only.
     /// </summary>
-    public uint TextureId => _colorTextures[0].TextureId;
+    public uint TextureId => _colorTextures.Length > 0 ? _colorTextures[0].TextureId : _depthTextureId;
 
     /// <summary>
     /// Gets all color attachment textures.
@@ -86,6 +90,22 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
     public Format DepthFormat => _depthFormat;
 
     /// <summary>
+    /// Gets bindless texture slot ID for the depth buffer.
+    /// </summary>
+    public uint DepthTextureId => _depthTextureId;
+
+    /// <summary>
+    /// Gets or sets the current tracked layout of the depth attachment.
+    /// </summary>
+    public ImageLayout DepthLayout { get; internal set; } = ImageLayout.Undefined;
+
+    /// <summary>
+    /// Creates a depth-only render target without color attachments.
+    /// </summary>
+    public static VulkanRenderTarget CreateDepthOnly(VulkanContext context, BindlessManager bindlessManager, uint width, uint height, Format? depthFormat = null, SamplerDescription? samplerDesc = null) =>
+        new(context, bindlessManager, width, height, Array.Empty<Format>(), hasDepth: true, samplerDesc: samplerDesc, depthFormat: depthFormat);
+
+    /// <summary>
     /// Initializes a single color attachment offscreen render target with optional depth buffer.
     /// </summary>
     public VulkanRenderTarget(VulkanContext context, BindlessManager bindless, uint width, uint height,
@@ -104,7 +124,7 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
     {
         if (width == 0 || height == 0)
             throw new ArgumentException("Render target dimensions must be greater than zero.");
-        if (colorFormats.Length == 0 && !hasDepth)
+        if (colorFormats.IsEmpty && !hasDepth)
             throw new ArgumentException("Render target must have at least one color attachment or depth attachment.");
 
         _context = context;
@@ -129,9 +149,9 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
     public VulkanTexture GetColorTexture(int index) => _colorTextures[index];
 
     /// <summary>
-    /// Gets bindless texture slot ID of specified color attachment.
+    /// Gets bindless texture slot ID of specified color attachment, or depth texture if depth-only.
     /// </summary>
-    public uint GetTextureId(int index) => _colorTextures[index].TextureId;
+    public uint GetTextureId(int index) => _colorTextures.Length > 0 ? _colorTextures[index].TextureId : _depthTextureId;
 
     /// <summary>
     /// Reallocates GPU color and depth images at new dimensions while preserving bindless texture slot IDs.
@@ -153,8 +173,25 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
 
         if (_hasDepth)
         {
-            DestroyDepthBuffer();
-            CreateDepthBuffer();
+            var oldDepthView = _depthImageView;
+            var oldDepthImage = _depthImage;
+            var oldDepthAlloc = _depthAllocation;
+
+            _depthImageView = default;
+            _depthImage = default;
+            _depthAllocation = default;
+            _depthMemory = default;
+
+            _context.DeletionQueue.Enqueue(_context.CurrentFrame, () =>
+            {
+                if (oldDepthView.Handle != 0)
+                    _context.Vk.DestroyImageView(_context.Device, oldDepthView, null);
+
+                if (oldDepthImage.Handle != 0)
+                    VMA.DestroyImage(_context.Allocator, oldDepthImage, oldDepthAlloc);
+            });
+
+            CreateDepthResources();
         }
     }
 
@@ -180,11 +217,11 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
 
         if (_hasDepth)
         {
-            CreateDepthBuffer();
+            CreateDepthResources();
         }
     }
 
-    private void CreateDepthBuffer()
+    private void CreateDepthResources()
     {
         ImageCreateInfo imageInfo = new()
         {
@@ -206,7 +243,7 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
             Usage = MemoryUsage.AutoPreferDevice
         };
 
-        Image img;
+        Silk.NET.Vulkan.Image img;
         Allocation alloc;
         AllocationInfo allocDetails;
         VulkanHelper.Check(
@@ -227,10 +264,34 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
 
         VulkanHelper.Check(_context.Vk.CreateImageView(_context.Device, in viewInfo, null, out _depthImageView),
             "Failed to create depth image view for render target.");
+
+        if (_depthSampler.Handle == 0)
+        {
+            _depthSampler = _bindlessManager.SamplerManager.GetOrCreateSampler(_samplerDesc ?? SamplerDescription.LinearClamp);
+        }
+
+        if (_depthTextureId == 0)
+        {
+            _depthTextureId = _bindlessManager.RegisterTexture(_depthImageView, _depthSampler);
+        }
+        else
+        {
+            _bindlessManager.UpdateDescriptor(_depthTextureId, _depthImageView, _depthSampler);
+        }
+
+        DepthLayout = ImageLayout.Undefined;
     }
 
-    private void DestroyDepthBuffer()
+    private void CreateDepthBuffer() => CreateDepthResources();
+
+    private void DestroyDepthResources()
     {
+        if (_depthTextureId != 0)
+        {
+            _bindlessManager.UnregisterTexture(_depthTextureId);
+            _depthTextureId = 0;
+        }
+
         if (_depthImageView.Handle != 0)
         {
             _context.Vk.DestroyImageView(_context.Device, _depthImageView, null);
@@ -246,6 +307,8 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
         }
     }
 
+    private void DestroyDepthBuffer() => DestroyDepthResources();
+
     private void DestroyResources()
     {
         for (int i = 0; i < _colorTextures.Length; i++)
@@ -254,7 +317,7 @@ public sealed unsafe class VulkanRenderTarget : IDisposable
         }
         _colorTextures = [];
 
-        DestroyDepthBuffer();
+        DestroyDepthResources();
     }
 
     public void Dispose()

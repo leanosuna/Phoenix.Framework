@@ -1,3 +1,4 @@
+using Phoenix.Framework.Rendering.Geometry.Vertices;
 using Silk.NET.Vulkan;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -8,7 +9,7 @@ namespace Phoenix.Framework.Rendering.Geometry.Model;
 /// Vertex structure for static and animated 3D models supporting positions, texture coordinates, normals, tangents, bitangents, bone IDs, and bone weights.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
-public struct ModelVertex
+public struct ModelVertex : IVertexLayout
 {
     public Vector3 Position;
     public Vector2 TexCoords;

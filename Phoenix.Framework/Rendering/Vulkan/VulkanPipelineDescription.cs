@@ -8,7 +8,7 @@ namespace Phoenix.Framework.Rendering.Vulkan;
 public sealed record VulkanPipelineDescription
 {
     public byte[] VertexShaderSpv { get; init; } = [];
-    public byte[] FragmentShaderSpv { get; init; } = [];
+    public byte[] FragmentShaderSpv { get; init; } = Array.Empty<byte>();
     public VertexInputBindingDescription[] VertexBindings { get; init; } = [];
     public VertexInputAttributeDescription[] VertexAttributes { get; init; } = [];
     public PrimitiveTopology Topology { get; init; } = PrimitiveTopology.TriangleList;
@@ -19,8 +19,14 @@ public sealed record VulkanPipelineDescription
     public bool DepthWriteEnable { get; init; } = true;
     public CompareOp DepthCompareOp { get; init; } = CompareOp.LessOrEqual;
     public bool BlendEnable { get; init; } = false;
+    public BlendMode? BlendMode { get; init; }
+    public bool DepthBiasEnable { get; init; }
+    public float DepthBiasConstantFactor { get; init; }
+    public float DepthBiasSlopeFactor { get; init; }
+    public float DepthBiasClamp { get; init; }
     public DescriptorSetLayout[] DescriptorSetLayouts { get; init; } = [];
     public uint PushConstantsSize { get; init; } = 80;
+    public ShaderStageFlags PushConstantStages { get; init; } = ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit;
     public Format ColorFormat { get; init; }
     public Format[] ColorFormats { get; init; } = [];
     public Format DepthFormat { get; init; }

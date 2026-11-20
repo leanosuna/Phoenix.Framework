@@ -68,6 +68,17 @@ public sealed class RenderViewport
     /// </summary>
     public bool Enabled { get; set; } = true;
 
+    /// <summary>
+    /// Gets whether internal rendering resolution scaling is currently active.
+    /// When false, rendering passes write directly to the swapchain backbuffer.
+    /// </summary>
+    public bool IsScalingActive => Enabled && (_scale.X != 1.0f || _scale.Y != 1.0f);
+
+    /// <summary>
+    /// Gets the primary offscreen scene render target managed by the graphics device.
+    /// </summary>
+    public Vulkan.VulkanRenderTarget? OffscreenTarget => _game.Graphics.SceneRenderTarget;
+
     internal RenderViewport(PhoenixGame game)
     {
         _game = game;

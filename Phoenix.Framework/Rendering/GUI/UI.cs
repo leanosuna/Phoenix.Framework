@@ -62,6 +62,7 @@ public sealed class UI : IDisposable
         }
 
         var io = ImGui.GetIO();
+        io.NativePtr->FontDefault = null;
         io.Fonts.Clear();
         _fonts.Clear();
 
@@ -90,23 +91,27 @@ public sealed class UI : IDisposable
         if (_fonts.Count > 0)
         {
             _currentFontSize = _fonts.Keys.Min();
+            io.NativePtr->FontDefault = _fonts[_currentFontSize].NativePtr;
         }
     }
 
     private int _currentFontSize = 16;
 
     /// <summary>
-    /// Selects an active font size for subsequent immediate-mode text rendering.
+    /// Selects an active font size for subsequent immediate-mode text rendering, or sets the global default font size when called outside a frame.
     /// </summary>
-    public void SetFontSize(int size)
+    public unsafe void SetFontSize(int size)
     {
-        _currentFontSize = size;
-        if (!_controller.IsFrameActive)
-            return;
-
         if (!_fonts.TryGetValue(size, out var font))
         {
             ErrorListWindow.Add($"Font size {size} not loaded.");
+            return;
+        }
+
+        _currentFontSize = size;
+        if (!_controller.IsFrameActive)
+        {
+            ImGui.GetIO().NativePtr->FontDefault = font.NativePtr;
             return;
         }
 

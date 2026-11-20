@@ -13,7 +13,8 @@ public class AnimatedModel : Model
     public const int MaxBones = 128;
 
     private Graphics? _graphics;
-    private DescriptorPool _boneDescriptorPool;
+    private readonly VulkanBuffer?[] _boneBuffers = new VulkanBuffer?[VulkanSwapchain.MaxFramesInFlight];
+    private readonly DescriptorSet[] _boneDescriptorSets = new DescriptorSet[VulkanSwapchain.MaxFramesInFlight];
     private int _selectedAnimation;
     private Matrix4x4[] _blendFromMatrices = [];
     private Animation? _blendFromAnim;
@@ -27,8 +28,11 @@ public class AnimatedModel : Model
     public int BoneCount { get; internal set; }
     public Matrix4x4[] FinalBoneMatrices { get; internal set; }
 
-    public VulkanBuffer? BoneBuffer { get; private set; }
-    public DescriptorSet BoneDescriptorSet { get; private set; }
+    public VulkanBuffer? BoneBuffer => _graphics != null ? _boneBuffers[_graphics.Context.CurrentFrame] : _boneBuffers[0];
+    public DescriptorSet BoneDescriptorSet => _graphics != null ? _boneDescriptorSets[_graphics.Context.CurrentFrame] : _boneDescriptorSets[0];
+
+    public DescriptorSet GetBoneDescriptorSet(int frameIndex) => _boneDescriptorSets[frameIndex];
+    public VulkanBuffer? GetBoneBuffer(int frameIndex) => _boneBuffers[frameIndex];
 
     public AnimatedModel()
     {
@@ -38,7 +42,7 @@ public class AnimatedModel : Model
     }
 
     /// <summary>
-    /// Allocates the bone uniform buffer and binds it to a Set 2 descriptor set via Graphics.
+    /// Allocates the bone uniform buffers and binds them to Set 3 descriptor sets via Graphics.
     /// </summary>
     public void InitializeGpuResources(Graphics graphics)
     {
@@ -54,16 +58,19 @@ public class AnimatedModel : Model
         }
 
         ulong bufferSize = (ulong)(MaxBones * 64);
-        BoneBuffer = graphics.CreateBuffer(
-            bufferSize,
-            BufferUsageFlags.UniformBufferBit,
-            MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+        for (int i = 0; i < VulkanSwapchain.MaxFramesInFlight; i++)
+        {
+            var buf = graphics.CreateBuffer(
+                bufferSize,
+                BufferUsageFlags.UniformBufferBit,
+                MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
 
-        BoneBuffer.SetData<Matrix4x4>(FinalBoneMatrices.AsSpan());
+            buf.SetData<Matrix4x4>(FinalBoneMatrices.AsSpan());
+            _boneBuffers[i] = buf;
 
-        var (pool, set) = graphics.CreateBoneDescriptorSet(BoneBuffer);
-        _boneDescriptorPool = pool;
-        BoneDescriptorSet = set;
+            var (_, set) = graphics.CreateBoneDescriptorSet(buf);
+            _boneDescriptorSets[i] = set;
+        }
     }
 
     /// <summary>
@@ -141,39 +148,52 @@ public class AnimatedModel : Model
             }
         }
 
-        BoneBuffer?.SetData<Matrix4x4>(FinalBoneMatrices.AsSpan());
+        UploadBoneTransforms();
     }
 
     /// <summary>
-    /// Binds the bone descriptor set to Set 3 for skeletal vertex skinning.
+    /// Uploads current bone matrices to the active frame's GPU uniform buffer.
+    /// </summary>
+    public void UploadBoneTransforms()
+    {
+        if (_graphics != null)
+        {
+            _boneBuffers[_graphics.Context.CurrentFrame]?.SetData<Matrix4x4>(FinalBoneMatrices.AsSpan());
+        }
+    }
+
+    /// <summary>
+    /// Binds the bone descriptor set to Set 3 for skeletal vertex skinning, ensuring current bone transforms are uploaded for the render frame.
     /// </summary>
     public void BindBoneDescriptorSet(RenderContext rc, VulkanPipeline pipeline, uint setIndex = 3)
     {
-        if (BoneDescriptorSet.Handle != 0)
+        int frame = rc.CurrentFrame;
+        _boneBuffers[frame]?.SetData<Matrix4x4>(FinalBoneMatrices.AsSpan());
+        var set = _boneDescriptorSets[frame];
+        if (set.Handle != 0)
         {
-            rc.BindDescriptorSet(pipeline, setIndex, BoneDescriptorSet);
+            rc.BindDescriptorSet(pipeline, setIndex, set);
         }
     }
-    
 
     /// <summary>
-    /// Disposes the bone GPU buffer, descriptor pool, and base model resources.
+    /// Disposes all bone GPU buffers, frees descriptor sets, and disposes base model resources.
     /// </summary>
     public override void Dispose()
     {
         if (_disposed)
             return;
 
-        BoneBuffer?.Dispose();
-        BoneBuffer = null;
-
-        if (_boneDescriptorPool.Handle != 0 && _graphics != null)
+        for (int i = 0; i < _boneBuffers.Length; i++)
         {
-            unsafe
+            _boneBuffers[i]?.Dispose();
+            _boneBuffers[i] = null;
+
+            if (_boneDescriptorSets[i].Handle != 0 && _graphics != null)
             {
-                _graphics.Context.Vk.DestroyDescriptorPool(_graphics.Context.Device, _boneDescriptorPool, null);
+                _graphics.FreeBoneDescriptorSet(_boneDescriptorSets[i]);
+                _boneDescriptorSets[i] = default;
             }
-            _boneDescriptorPool = default;
         }
 
         base.Dispose();

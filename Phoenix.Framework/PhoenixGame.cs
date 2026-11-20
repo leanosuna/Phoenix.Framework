@@ -341,14 +341,7 @@ public abstract class PhoenixGame : IDisposable
         if (Graphics.RenderHalt)
         {
             // Preserve the frozen frame from the scene target instead of clearing to solid background color
-            if (Graphics.SceneRenderTarget != null)
-            {
-                Graphics.RenderContext.BlitToSwapchain(Graphics.SceneRenderTarget, Graphics.Viewport.Filter);
-            }
-        }
-        else if (Graphics.Viewport.Enabled)
-        {
-            if (Graphics.RenderContext.HasRenderedPass)
+            if (Graphics.SceneRenderTarget is { ColorTexture.CurrentLayout: Silk.NET.Vulkan.ImageLayout.ShaderReadOnlyOptimal })
             {
                 Graphics.RenderContext.BlitToSwapchain(Graphics.SceneRenderTarget, Graphics.Viewport.Filter);
             }
@@ -356,6 +349,10 @@ public abstract class PhoenixGame : IDisposable
             {
                 Graphics.RenderContext.FallbackClearPass(Graphics.ClearColor);
             }
+        }
+        else if (Graphics.Viewport.Enabled && Graphics.RenderContext.HasRenderedToSceneTarget)
+        {
+            Graphics.RenderContext.BlitToSwapchain(Graphics.SceneRenderTarget, Graphics.Viewport.Filter);
         }
         else if (!Graphics.RenderContext.HasRenderedPass)
         {

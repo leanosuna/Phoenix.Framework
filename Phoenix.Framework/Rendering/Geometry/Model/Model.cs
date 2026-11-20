@@ -30,10 +30,35 @@ public class Model : IDisposable
     public event Action<int, VulkanTexture>? OnTextureLoaded;
 
     /// <summary>
+    /// Gets all flattened meshes across all model parts.
+    /// </summary>
+    public IReadOnlyList<ModelMesh> Submeshes
+    {
+        get
+        {
+            var list = new List<ModelMesh>();
+            for (int p = 0; p < Parts.Count; p++)
+            {
+                list.AddRange(Parts[p].Meshes);
+            }
+            return list;
+        }
+    }
+
+    /// <summary>
     /// Draws all parts and meshes of the model using the bound pipeline and provided world transform.
     /// </summary>
     public virtual void Draw(RenderContext rc, VulkanPipeline pipeline, in Matrix4x4 world)
     {
+        Draw(rc, pipeline, in world, 0);
+    }
+
+    /// <summary>
+    /// Draws all parts and meshes of the model using the bound pipeline, provided world transform, and optional custom flags.
+    /// </summary>
+    public virtual void Draw(RenderContext rc, VulkanPipeline pipeline, in Matrix4x4 world, uint customFlags)
+    {
+        rc.BindPipeline(pipeline);
         for (int p = 0; p < Parts.Count; p++)
         {
             var part = Parts[p];
@@ -51,6 +76,10 @@ public class Model : IDisposable
                 {
                     albedo = BaseTextureSlot + (uint)mesh.MaterialIndex;
                 }
+                else if (BindlessManager?.DefaultWhiteTexture != null)
+                {
+                    albedo = BindlessManager.DefaultWhiteTexture.TextureId;
+                }
 
                 uint normal = 0;
                 if (mesh.NormalIndex >= 0 && mesh.NormalIndex < Textures.Count && Textures[mesh.NormalIndex] != null)
@@ -62,11 +91,87 @@ public class Model : IDisposable
                     normal = BaseTextureSlot + (uint)mesh.NormalIndex;
                 }
 
-                PushConstantsData pc = new(meshWorld, albedoIndex: albedo, normalIndex: normal);
+                PushConstantsData pc = new(meshWorld, albedoIndex: albedo, normalIndex: normal, customFlags: customFlags);
                 rc.PushConstants(pipeline, pc);
                 mesh.Draw(rc);
             }
         }
+    }
+
+    /// <summary>
+    /// Draws all parts and meshes using a custom push constants selector for each submesh.
+    /// </summary>
+    public void Draw<TPush>(RenderContext rc, VulkanPipeline pipeline, in Matrix4x4 world, SubmeshPushConstantSelector<TPush> pushSelector) where TPush : unmanaged
+    {
+        rc.BindPipeline(pipeline);
+
+        int submeshIndex = 0;
+        for (int p = 0; p < Parts.Count; p++)
+        {
+            var part = Parts[p];
+            for (int m = 0; m < part.Meshes.Count; m++)
+            {
+                var mesh = part.Meshes[m];
+                var meshWorld = mesh.Transform * world;
+                Matrix4x4 normalMatrix = Matrix4x4.Identity;
+                if (Matrix4x4.Invert(meshWorld, out var inv))
+                {
+                    normalMatrix = Matrix4x4.Transpose(inv);
+                }
+
+                uint albedo = 0;
+                if (mesh.MaterialIndex >= 0 && mesh.MaterialIndex < Textures.Count && Textures[mesh.MaterialIndex] != null)
+                {
+                    albedo = Textures[mesh.MaterialIndex].TextureId;
+                }
+                else if (BaseTextureSlot != 0 && mesh.MaterialIndex >= 0 && (uint)mesh.MaterialIndex < TextureSlotCount)
+                {
+                    albedo = BaseTextureSlot + (uint)mesh.MaterialIndex;
+                }
+                else if (BindlessManager?.DefaultWhiteTexture != null)
+                {
+                    albedo = BindlessManager.DefaultWhiteTexture.TextureId;
+                }
+
+                uint normal = 0;
+                if (mesh.NormalIndex >= 0 && mesh.NormalIndex < Textures.Count && Textures[mesh.NormalIndex] != null)
+                {
+                    normal = Textures[mesh.NormalIndex].TextureId;
+                }
+                else if (BaseTextureSlot != 0 && mesh.NormalIndex >= 0 && (uint)mesh.NormalIndex < TextureSlotCount)
+                {
+                    normal = BaseTextureSlot + (uint)mesh.NormalIndex;
+                }
+
+                var info = new ModelDrawSubmesh
+                {
+                    SubmeshIndex = submeshIndex++,
+                    Submesh = mesh,
+                    Part = part,
+                    WorldMatrix = meshWorld,
+                    NormalMatrix = normalMatrix,
+                    AlbedoTextureId = albedo,
+                    NormalTextureId = normal,
+                    MetallicRoughnessTextureId = 0,
+                    EmissiveTextureId = 0,
+                    OcclusionTextureId = 0
+                };
+
+                TPush push = pushSelector(in info, in world);
+                rc.PushConstants(pipeline, in push);
+                rc.BindVertexBuffer(mesh.VertexBuffer);
+                rc.BindIndexBuffer(mesh.IndexBuffer);
+                rc.DrawIndexed(mesh.IndexCount);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Draws all parts and meshes using a simplified custom push constants selector for each submesh.
+    /// </summary>
+    public void Draw<TPush>(RenderContext rc, VulkanPipeline pipeline, in Matrix4x4 world, Func<ModelDrawSubmesh, TPush> pushSelector) where TPush : unmanaged
+    {
+        Draw(rc, pipeline, in world, (in ModelDrawSubmesh sub, in Matrix4x4 _) => pushSelector(sub));
     }
 
     /// <summary>

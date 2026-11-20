@@ -402,6 +402,8 @@ public sealed unsafe class VulkanSwapchain : IDisposable
         var vk = _context.Vk;
 
         vk.WaitForFences(_context.Device, 1, in _inFlightFences[_currentFrame], true, ulong.MaxValue);
+        _context.CurrentFrame = _currentFrame;
+        _context.DeletionQueue.FlushFrame(_currentFrame);
 
         var result = _context.KhrSwapchain.AcquireNextImage(
             _context.Device,
@@ -587,6 +589,7 @@ public sealed unsafe class VulkanSwapchain : IDisposable
         }
 
         _currentFrame = (_currentFrame + 1) % MaxFramesInFlight;
+        _context.CurrentFrame = _currentFrame;
     }
 
     /// <summary>
@@ -603,6 +606,7 @@ public sealed unsafe class VulkanSwapchain : IDisposable
         lock (_context.GraphicsQueueLock)
         {
             _context.Vk.DeviceWaitIdle(_context.Device);
+            _context.DeletionQueue.FlushAll();
 
             for (int i = 0; i < _renderFinishedSemaphores.Length; i++)
             {
@@ -637,6 +641,7 @@ public sealed unsafe class VulkanSwapchain : IDisposable
         lock (_context.GraphicsQueueLock)
         {
             _context.Vk.DeviceWaitIdle(_context.Device);
+            _context.DeletionQueue.FlushAll();
 
             for (int i = 0; i < _renderFinishedSemaphores.Length; i++)
             {

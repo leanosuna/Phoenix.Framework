@@ -41,7 +41,7 @@ public sealed class IndirectMeshRenderer
         ulong offset = (ulong)firstDraw * stride;
 
         rc.BindPipeline(pipeline);
-        rc.BindDescriptorSet(pipeline, 2, batch.MetadataDescriptorSet);
+        rc.BindDescriptorSet(pipeline, 2, batch.GetMetadataDescriptorSet(rc.CurrentFrame));
         rc.BindVertexBuffer(batch.PackedVertexBuffer);
         rc.BindIndexBuffer(batch.PackedIndexBuffer);
         rc.DrawIndexedIndirect(batch.IndirectCommandBuffer, offset, drawCount, stride);
@@ -71,9 +71,33 @@ public sealed class IndirectMeshRenderer
 
         rc.BindPipeline(pipeline);
         rc.PushConstants(pipeline, in pushConstants);
-        rc.BindDescriptorSet(pipeline, 2, batch.MetadataDescriptorSet);
+        rc.BindDescriptorSet(pipeline, 2, batch.GetMetadataDescriptorSet(rc.CurrentFrame));
         rc.BindVertexBuffer(batch.PackedVertexBuffer);
         rc.BindIndexBuffer(batch.PackedIndexBuffer);
         rc.DrawIndexedIndirect(batch.IndirectCommandBuffer, offset, drawCount, stride);
+    }
+
+    /// <summary>
+    /// Records an indirect draw for all submeshes within the batch with push constants data.
+    /// </summary>
+    public void Draw(RenderContext rc, VulkanPipeline pipeline, IndirectDrawBatch batch, PushConstantsData pushConstants)
+    {
+        Render(rc, pipeline, batch, in pushConstants);
+    }
+
+    /// <summary>
+    /// Records an indirect draw for all submeshes within the batch.
+    /// </summary>
+    public void Draw(RenderContext rc, VulkanPipeline pipeline, IndirectDrawBatch batch)
+    {
+        Render(rc, pipeline, batch);
+    }
+
+    /// <summary>
+    /// Records an indirect draw for all submeshes within the batch with custom push constants data.
+    /// </summary>
+    public void Draw<T>(RenderContext rc, VulkanPipeline pipeline, IndirectDrawBatch batch, in T pushConstants) where T : unmanaged
+    {
+        Render(rc, pipeline, batch, in pushConstants);
     }
 }

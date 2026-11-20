@@ -72,6 +72,30 @@ public sealed class Graphics : IDisposable
     /// </summary>
     public DescriptorSetLayout IndirectMetadataLayout { get; private set; }
 
+    private VulkanDescriptorAllocator? _descriptorAllocator;
+
+    /// <summary>
+    /// Gets the shared growable descriptor allocator used for dynamic uniform and storage buffer descriptor sets.
+    /// </summary>
+    public VulkanDescriptorAllocator DescriptorAllocator => _descriptorAllocator!;
+
+    private readonly List<VulkanRenderTarget> _screenTargets = new();
+
+    /// <summary>
+    /// Gets the current render viewport width in pixels.
+    /// </summary>
+    public uint RenderWidth => Viewport.Width;
+
+    /// <summary>
+    /// Gets the current render viewport height in pixels.
+    /// </summary>
+    public uint RenderHeight => Viewport.Height;
+
+    /// <summary>
+    /// Gets the default white fallback texture from the bindless manager.
+    /// </summary>
+    public VulkanTexture? DefaultWhiteTexture => BindlessManager?.DefaultWhiteTexture;
+
     /// <summary>
     /// Gets or sets the default background clear color for dynamic render passes.
     /// </summary>
@@ -122,6 +146,7 @@ public sealed class Graphics : IDisposable
         BindlessManager = new BindlessManager(Context);
         BoneLayout = CreateBoneLayout();
         IndirectMetadataLayout = CreateStorageBufferLayout(ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit, 0);
+        _descriptorAllocator = new VulkanDescriptorAllocator(Context);
         Viewport = new RenderViewport(game);
         SceneRenderTarget = CreateRenderTarget(Viewport.Width, Viewport.Height, Swapchain.ImageFormat, true, Swapchain.DepthFormat);
         RenderContext = new RenderContext(this);
@@ -143,12 +168,58 @@ public sealed class Graphics : IDisposable
         return new VulkanRenderTarget(Context, BindlessManager, width, height, colorFormats, hasDepth, depthFormat);
     }
 
+    /// <summary>
+    /// Creates an offscreen render target scaled relative to the viewport resolution that auto-resizes when the viewport scale or window size changes.
+    /// </summary>
+    public VulkanRenderTarget CreateScreenRenderTarget(
+        Format[] colorFormats,
+        bool hasDepth = true,
+        float scale = 1.0f,
+        SamplerDescription? samplerDesc = null,
+        Format? depthFormat = null)
+    {
+        uint w = (uint)Math.Max(1, (int)(RenderWidth * scale));
+        uint h = (uint)Math.Max(1, (int)(RenderHeight * scale));
+        var rt = new VulkanRenderTarget(Context, BindlessManager, w, h, colorFormats, hasDepth, depthFormat, samplerDesc);
+        rt.ViewportScale = scale;
+        _screenTargets.Add(rt);
+        return rt;
+    }
+
+    /// <summary>
+    /// Creates a single color attachment render target scaled relative to the viewport resolution that auto-resizes.
+    /// </summary>
+    public VulkanRenderTarget CreateScreenRenderTarget(
+        float scale = 1.0f,
+        Format colorFormat = Format.R16G16B16A16Sfloat,
+        bool hasDepth = true,
+        SamplerDescription? samplerDesc = null)
+    {
+        return CreateScreenRenderTarget([colorFormat], hasDepth, scale, samplerDesc);
+    }
+
+    /// <summary>
+    /// Unregisters an auto-resizing screen render target.
+    /// </summary>
+    public void UnregisterScreenRenderTarget(VulkanRenderTarget target)
+    {
+        _screenTargets.Remove(target);
+    }
+
     internal void HandleViewportResize()
     {
         if (SceneRenderTarget != null && (SceneRenderTarget.Width != Viewport.Width || SceneRenderTarget.Height != Viewport.Height))
         {
             Context.WaitIdle();
             SceneRenderTarget.Resize(Viewport.Width, Viewport.Height);
+        }
+
+        for (int i = _screenTargets.Count - 1; i >= 0; i--)
+        {
+            var rt = _screenTargets[i];
+            uint w = (uint)Math.Max(1, (int)(RenderWidth * rt.ViewportScale));
+            uint h = (uint)Math.Max(1, (int)(RenderHeight * rt.ViewportScale));
+            rt.Resize(w, h);
         }
     }
 
@@ -215,25 +286,31 @@ public sealed class Graphics : IDisposable
     }
 
     /// <summary>
+    /// Creates a fluent graphics pipeline builder.
+    /// </summary>
+    public PipelineBuilder CreatePipeline() => new(this);
+
+    /// <summary>
+    /// Creates a fluent compute pipeline builder.
+    /// </summary>
+    public ComputePipelineBuilder CreateComputePipeline() => new(this);
+
+    /// <summary>
     /// Creates a graphics pipeline configured for dynamic rendering and depth testing.
-    /// Automatically injects Set 0 (FrameUniforms) and Set 1 (Bindless) descriptor set layouts if not present.
+    /// Automatically injects Set 0 (FrameUniforms), Set 1 (Bindless), and Set 2 (IndirectMetadata) descriptor set layouts if not present.
     /// </summary>
     public VulkanPipeline CreatePipeline(VulkanPipelineDescription description)
     {
         var layouts = description.DescriptorSetLayouts;
-        List<DescriptorSetLayout> list = layouts.Length == 0 ? [] : [.. layouts];
-
-        if (list.Count < 1 || list[0].Handle != FrameUniformsManager.DescriptorSetLayout.Handle)
-            list.Insert(0, FrameUniformsManager.DescriptorSetLayout);
-        if (list.Count < 2 || list[1].Handle != BindlessManager.DescriptorSetLayout.Handle)
-            list.Insert(1, BindlessManager.DescriptorSetLayout);
-
-        // Set 2 is reserved for submesh metadata or custom pass storage buffers.
-        // Set 3 is reserved for skeletal animation bone uniform buffers.
-        // If BoneLayout was placed at index 2 without a Set 2 layout, insert IndirectMetadataLayout at index 2.
-        if (list.Count > 2 && list[2].Handle == BoneLayout.Handle)
+        if (layouts.Length > 0 && layouts[0].Handle == FrameUniformsManager.DescriptorSetLayout.Handle)
         {
-            list.Insert(2, IndirectMetadataLayout);
+            return new VulkanPipeline(Context, description);
+        }
+
+        List<DescriptorSetLayout> list = [FrameUniformsManager.DescriptorSetLayout, BindlessManager.DescriptorSetLayout, IndirectMetadataLayout];
+        if (layouts.Length > 0)
+        {
+            list.AddRange(layouts);
         }
 
         var descWithUbo = description with { DescriptorSetLayouts = [.. list] };
@@ -293,38 +370,11 @@ public sealed class Graphics : IDisposable
     }
 
     /// <summary>
-    /// Allocates a dedicated descriptor pool and descriptor set for a bone uniform buffer.
+    /// Allocates a descriptor set for a bone uniform buffer from the growable descriptor allocator.
     /// </summary>
     public unsafe (DescriptorPool Pool, DescriptorSet Set) CreateBoneDescriptorSet(VulkanBuffer buffer)
     {
-        DescriptorPoolSize poolSize = new()
-        {
-            Type = DescriptorType.UniformBuffer,
-            DescriptorCount = 1
-        };
-
-        DescriptorPoolCreateInfo poolInfo = new()
-        {
-            SType = StructureType.DescriptorPoolCreateInfo,
-            PoolSizeCount = 1,
-            PPoolSizes = &poolSize,
-            MaxSets = 1
-        };
-
-        VulkanHelper.Check(Context.Vk.CreateDescriptorPool(Context.Device, in poolInfo, null, out var pool),
-            "Failed to create bone descriptor pool.");
-
-        var layout = BoneLayout;
-        DescriptorSetAllocateInfo allocInfo = new()
-        {
-            SType = StructureType.DescriptorSetAllocateInfo,
-            DescriptorPool = pool,
-            DescriptorSetCount = 1,
-            PSetLayouts = &layout
-        };
-
-        VulkanHelper.Check(Context.Vk.AllocateDescriptorSets(Context.Device, in allocInfo, out var set),
-            "Failed to allocate bone descriptor set.");
+        var set = _descriptorAllocator!.Allocate(BoneLayout);
 
         DescriptorBufferInfo bufferInfo = new()
         {
@@ -346,8 +396,13 @@ public sealed class Graphics : IDisposable
 
         Context.Vk.UpdateDescriptorSets(Context.Device, 1, in write, 0, null);
 
-        return (pool, set);
+        return (default, set);
     }
+
+    /// <summary>
+    /// Frees a previously allocated bone descriptor set back to the allocator.
+    /// </summary>
+    public void FreeBoneDescriptorSet(DescriptorSet set) => _descriptorAllocator?.Free(set);
 
     /// <summary>
     /// Creates a descriptor set layout for a single storage buffer at the specified binding.
@@ -376,39 +431,18 @@ public sealed class Graphics : IDisposable
     }
 
     /// <summary>
-    /// Allocates a descriptor pool and descriptor set bound to a storage buffer.
+    /// Allocates a descriptor set bound to a storage buffer from the growable descriptor allocator.
     /// </summary>
-    public unsafe (DescriptorPool Pool, DescriptorSet Set) CreateStorageBufferDescriptorSet(DescriptorSetLayout layout, VulkanStorageBuffer buffer, uint binding = 0)
+    public unsafe (DescriptorPool Pool, DescriptorSet Set) CreateStorageBufferDescriptorSet(DescriptorSetLayout layout, VulkanBuffer buffer, ulong size, uint binding = 0)
     {
-        DescriptorPoolSize poolSize = new()
+        var set = _descriptorAllocator!.Allocate(layout);
+
+        DescriptorBufferInfo bufferInfo = new()
         {
-            Type = DescriptorType.StorageBuffer,
-            DescriptorCount = 1
+            Buffer = buffer.Buffer,
+            Offset = 0,
+            Range = size
         };
-
-        DescriptorPoolCreateInfo poolInfo = new()
-        {
-            SType = StructureType.DescriptorPoolCreateInfo,
-            PoolSizeCount = 1,
-            PPoolSizes = &poolSize,
-            MaxSets = 1
-        };
-
-        VulkanHelper.Check(Context.Vk.CreateDescriptorPool(Context.Device, in poolInfo, null, out var pool),
-            "Failed to create storage buffer descriptor pool.");
-
-        DescriptorSetAllocateInfo allocInfo = new()
-        {
-            SType = StructureType.DescriptorSetAllocateInfo,
-            DescriptorPool = pool,
-            DescriptorSetCount = 1,
-            PSetLayouts = &layout
-        };
-
-        VulkanHelper.Check(Context.Vk.AllocateDescriptorSets(Context.Device, in allocInfo, out var set),
-            "Failed to allocate storage buffer descriptor set.");
-
-        var bufferInfo = buffer.GetDescriptorInfo();
 
         WriteDescriptorSet write = new()
         {
@@ -423,8 +457,21 @@ public sealed class Graphics : IDisposable
 
         Context.Vk.UpdateDescriptorSets(Context.Device, 1, in write, 0, null);
 
-        return (pool, set);
+        return (default, set);
     }
+
+    /// <summary>
+    /// Allocates a descriptor set bound to a storage buffer from the growable descriptor allocator.
+    /// </summary>
+    public (DescriptorPool Pool, DescriptorSet Set) CreateStorageBufferDescriptorSet(DescriptorSetLayout layout, VulkanStorageBuffer buffer, uint binding = 0)
+    {
+        return CreateStorageBufferDescriptorSet(layout, buffer.DeviceBuffer, buffer.Size, binding);
+    }
+
+    /// <summary>
+    /// Frees a previously allocated storage buffer descriptor set back to the allocator.
+    /// </summary>
+    public void FreeStorageBufferDescriptorSet(DescriptorSet set) => _descriptorAllocator?.Free(set);
 
     /// <summary>
     /// Waits for all submitted GPU commands across all queues to finish execution.
@@ -444,10 +491,7 @@ public sealed class Graphics : IDisposable
     {
         WaitIdle();
 
-        if (SceneRenderTarget != null)
-        {
-            SceneRenderTarget.ColorTexture.SaveToFile(filePath, ImageLayout.ShaderReadOnlyOptimal);
-        }
+        SceneRenderTarget?.ColorTexture?.SaveToFile(filePath, ImageLayout.ShaderReadOnlyOptimal);
     }
 
     /// <summary>
@@ -475,6 +519,15 @@ public sealed class Graphics : IDisposable
             }
             IndirectMetadataLayout = default;
         }
+
+        _descriptorAllocator?.Dispose();
+        _descriptorAllocator = null;
+
+        for (int i = _screenTargets.Count - 1; i >= 0; i--)
+        {
+            _screenTargets[i]?.Dispose();
+        }
+        _screenTargets.Clear();
 
         SceneRenderTarget?.Dispose();
         BindlessManager.Dispose();

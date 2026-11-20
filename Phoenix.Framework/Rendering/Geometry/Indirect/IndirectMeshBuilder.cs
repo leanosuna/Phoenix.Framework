@@ -144,41 +144,57 @@ public sealed class IndirectMeshBuilder
         if (_commands.Count == 0)
             throw new InvalidOperationException("Cannot build an empty indirect draw batch.");
 
+        using var uploadBatch = new VulkanUploadBatch(graphics.Context);
+
         ulong vertexBufferSize = (ulong)(_packedVertices.Count * Marshal.SizeOf<ModelVertex>());
         var vertexBuffer = graphics.CreateBuffer(
             vertexBufferSize,
             BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit,
             MemoryPropertyFlags.DeviceLocalBit);
-        vertexBuffer.SetData<ModelVertex>(CollectionsMarshal.AsSpan(_packedVertices));
+        uploadBatch.UploadBuffer<ModelVertex>(vertexBuffer, CollectionsMarshal.AsSpan(_packedVertices));
 
         ulong indexBufferSize = (ulong)(_packedIndices.Count * sizeof(uint));
         var indexBuffer = graphics.CreateBuffer(
             indexBufferSize,
             BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit,
             MemoryPropertyFlags.DeviceLocalBit);
-        indexBuffer.SetData<uint>(CollectionsMarshal.AsSpan(_packedIndices));
+        uploadBatch.UploadBuffer<uint>(indexBuffer, CollectionsMarshal.AsSpan(_packedIndices));
 
         ulong cmdBufferSize = (ulong)(_commands.Count * Marshal.SizeOf<DrawIndexedIndirectCommand>());
         var indirectCmdBuffer = new VulkanStorageBuffer(graphics.Context, cmdBufferSize, hostVisible: false);
-        indirectCmdBuffer.SetData<DrawIndexedIndirectCommand>(CollectionsMarshal.AsSpan(_commands));
+        uploadBatch.UploadBuffer<DrawIndexedIndirectCommand>(indirectCmdBuffer.DeviceBuffer, CollectionsMarshal.AsSpan(_commands));
+
+        uploadBatch.SubmitAndWait();
 
         ulong metaBufferSize = (ulong)(_metadata.Count * Marshal.SizeOf<SubmeshMetadata>());
-        var metadataBuffer = new VulkanStorageBuffer(graphics.Context, metaBufferSize, hostVisible: true);
-        metadataBuffer.SetData<SubmeshMetadata>(CollectionsMarshal.AsSpan(_metadata));
-
+        var metadataSpan = CollectionsMarshal.AsSpan(_metadata);
         var layout = metadataLayout ?? graphics.IndirectMetadataLayout;
-        var (pool, set) = graphics.CreateStorageBufferDescriptorSet(layout, metadataBuffer, binding: 0);
+
+        var metadataBuffers = new VulkanBuffer[VulkanSwapchain.MaxFramesInFlight];
+        var metadataDescriptorSets = new DescriptorSet[VulkanSwapchain.MaxFramesInFlight];
+
+        for (int i = 0; i < VulkanSwapchain.MaxFramesInFlight; i++)
+        {
+            var metaBuffer = graphics.CreateBuffer(
+                metaBufferSize,
+                BufferUsageFlags.StorageBufferBit,
+                MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
+            metaBuffer.SetData(metadataSpan);
+            metadataBuffers[i] = metaBuffer;
+
+            var (_, set) = graphics.CreateStorageBufferDescriptorSet(layout, metaBuffer, metaBufferSize, binding: 0);
+            metadataDescriptorSets[i] = set;
+        }
 
         return new IndirectDrawBatch(
             graphics,
             vertexBuffer,
             indexBuffer,
             indirectCmdBuffer,
-            metadataBuffer,
+            metadataBuffers,
+            metadataDescriptorSets,
             _commands.ToArray(),
             _metadata.ToArray(),
-            pool,
-            set,
             layout);
     }
 }

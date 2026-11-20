@@ -6,6 +6,7 @@ using Silk.NET.Vulkan.Extensions.EXT;
 using Silk.NET.Vulkan.Extensions.KHR;
 using Silk.NET.Windowing;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using piko.VulkanMemoryAllocator;
 
@@ -54,6 +55,12 @@ public sealed unsafe class VulkanContext : IDisposable
     public uint PresentFamilyIndex => _presentFamilyIndex;
     public Queue? TransferQueue => _transferQueue;
     public uint? TransferFamilyIndex => _transferFamilyIndex;
+    public int CurrentFrame { get; internal set; }
+    public VulkanDeletionQueue DeletionQueue { get; }
+    public PipelineCache PipelineCache { get; private set; }
+    public CommandPool CommandPool => _utilityCommandPool;
+    public CommandPool UtilityCommandPool => _utilityCommandPool;
+    public CommandPool TransferCommandPool => _transferCommandPool;
 
     /// <summary>
     /// Waits for all operations on the logical device to complete.
@@ -64,6 +71,7 @@ public sealed unsafe class VulkanContext : IDisposable
         {
             _vk.DeviceWaitIdle(_device);
         }
+        DeletionQueue.FlushAll();
     }
 
     /// <summary>
@@ -95,6 +103,8 @@ public sealed unsafe class VulkanContext : IDisposable
         CreateUtilityCommandPool();
         CreateTransferCommandPool();
         InitAllocator();
+        CreatePipelineCache();
+        DeletionQueue = new VulkanDeletionQueue(VulkanSwapchain.MaxFramesInFlight);
     }
 
     /// <summary>
@@ -654,7 +664,7 @@ public sealed unsafe class VulkanContext : IDisposable
     }
 
     /// <summary>
-    /// Ends recording, submits the single-time command buffer to the graphics queue, and waits for completion.
+    /// Ends recording, submits the single-time command buffer to the graphics queue, and waits for completion via a fence.
     /// </summary>
     public void EndSingleTimeCommands(CommandBuffer commandBuffer)
     {
@@ -670,12 +680,28 @@ public sealed unsafe class VulkanContext : IDisposable
                 PCommandBuffers = &commandBuffer
             };
 
-            lock (GraphicsQueueLock)
+            FenceCreateInfo fenceInfo = new()
             {
-                VulkanHelper.Check(_vk.QueueSubmit(_graphicsQueue, 1, in submitInfo, default),
-                    "Failed to submit single-time command buffer to graphics queue.");
+                SType = StructureType.FenceCreateInfo
+            };
 
-                _vk.QueueWaitIdle(_graphicsQueue);
+            VulkanHelper.Check(_vk.CreateFence(_device, in fenceInfo, null, out var fence),
+                "Failed to create fence for single-time command buffer.");
+
+            try
+            {
+                lock (GraphicsQueueLock)
+                {
+                    VulkanHelper.Check(_vk.QueueSubmit(_graphicsQueue, 1, in submitInfo, fence),
+                        "Failed to submit single-time command buffer to graphics queue.");
+                }
+
+                VulkanHelper.Check(_vk.WaitForFences(_device, 1, in fence, true, ulong.MaxValue),
+                    "Failed waiting for single-time command buffer fence.");
+            }
+            finally
+            {
+                _vk.DestroyFence(_device, fence, null);
             }
 
             _vk.FreeCommandBuffers(_device, _utilityCommandPool, 1, in commandBuffer);
@@ -730,6 +756,105 @@ public sealed unsafe class VulkanContext : IDisposable
     }
 
     /// <summary>
+    /// Loads cached pipeline data from disk if available and creates the device PipelineCache.
+    /// </summary>
+    private void CreatePipelineCache()
+    {
+        string cacheDir = Path.Combine(AppContext.BaseDirectory, ".cache");
+        string cachePath = Path.Combine(cacheDir, "pipeline_cache.bin");
+
+        byte[]? cacheData = null;
+        try
+        {
+            if (File.Exists(cachePath))
+            {
+                cacheData = File.ReadAllBytes(cachePath);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[VulkanContext] Failed to read pipeline cache file: {ex.Message}");
+        }
+
+        try
+        {
+            if (cacheData != null && cacheData.Length > 0)
+            {
+                fixed (byte* pData = cacheData)
+                {
+                    PipelineCacheCreateInfo createInfo = new()
+                    {
+                        SType = StructureType.PipelineCacheCreateInfo,
+                        InitialDataSize = (nuint)cacheData.Length,
+                        PInitialData = pData
+                    };
+
+                    if (_vk.CreatePipelineCache(_device, in createInfo, null, out var cache) == Result.Success)
+                    {
+                        PipelineCache = cache;
+                        return;
+                    }
+                }
+            }
+
+            PipelineCacheCreateInfo emptyInfo = new()
+            {
+                SType = StructureType.PipelineCacheCreateInfo
+            };
+            VulkanHelper.Check(_vk.CreatePipelineCache(_device, in emptyInfo, null, out var fallbackCache),
+                "Failed to create Vulkan pipeline cache.");
+            PipelineCache = fallbackCache;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[VulkanContext] Failed to create pipeline cache, creating empty cache: {ex.Message}");
+            PipelineCacheCreateInfo emptyInfo = new()
+            {
+                SType = StructureType.PipelineCacheCreateInfo
+            };
+            _vk.CreatePipelineCache(_device, in emptyInfo, null, out var fallbackCache);
+            PipelineCache = fallbackCache;
+        }
+    }
+
+    /// <summary>
+    /// Serializes the current pipeline cache to disk and destroys the handle.
+    /// </summary>
+    private void SaveAndDestroyPipelineCache()
+    {
+        if (PipelineCache.Handle == 0)
+            return;
+
+        try
+        {
+            nuint dataSize = 0;
+            if (_vk.GetPipelineCacheData(_device, PipelineCache, ref dataSize, null) == Result.Success && dataSize > 0)
+            {
+                byte[] buffer = new byte[dataSize];
+                fixed (byte* pBuffer = buffer)
+                {
+                    if (_vk.GetPipelineCacheData(_device, PipelineCache, ref dataSize, pBuffer) == Result.Success)
+                    {
+                        string cacheDir = Path.Combine(AppContext.BaseDirectory, ".cache");
+                        Directory.CreateDirectory(cacheDir);
+                        string cachePath = Path.Combine(cacheDir, "pipeline_cache.bin");
+                        File.WriteAllBytes(cachePath, buffer);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[VulkanContext] Failed to save pipeline cache: {ex.Message}");
+        }
+        finally
+        {
+            _vk.DestroyPipelineCache(_device, PipelineCache, null);
+            PipelineCache = default;
+        }
+    }
+
+    /// <summary>
     /// Begins recording a one-time command buffer for background asset upload operations on the transfer queue.
     /// </summary>
     public CommandBuffer BeginTransferCommands()
@@ -767,7 +892,7 @@ public sealed unsafe class VulkanContext : IDisposable
     }
 
     /// <summary>
-    /// Ends recording, submits to the transfer queue, and waits for transfer completion without stalling the graphics queue.
+    /// Ends recording, submits to the transfer queue, and waits for transfer completion via a fence without stalling unrelated queue work.
     /// </summary>
     public void EndTransferCommands(CommandBuffer commandBuffer)
     {
@@ -784,12 +909,30 @@ public sealed unsafe class VulkanContext : IDisposable
             };
 
             var queue = _transferQueue ?? _graphicsQueue;
-            lock (TransferQueueLock)
-            {
-                VulkanHelper.Check(_vk.QueueSubmit(queue, 1, in submitInfo, default),
-                    "Failed to submit transfer command buffer to transfer queue.");
+            var queueLock = _transferQueue.HasValue ? TransferQueueLock : GraphicsQueueLock;
 
-                _vk.QueueWaitIdle(queue);
+            FenceCreateInfo fenceInfo = new()
+            {
+                SType = StructureType.FenceCreateInfo
+            };
+
+            VulkanHelper.Check(_vk.CreateFence(_device, in fenceInfo, null, out var fence),
+                "Failed to create fence for transfer command buffer.");
+
+            try
+            {
+                lock (queueLock)
+                {
+                    VulkanHelper.Check(_vk.QueueSubmit(queue, 1, in submitInfo, fence),
+                        "Failed to submit transfer command buffer to transfer queue.");
+                }
+
+                VulkanHelper.Check(_vk.WaitForFences(_device, 1, in fence, true, ulong.MaxValue),
+                    "Failed waiting for transfer command buffer fence.");
+            }
+            finally
+            {
+                _vk.DestroyFence(_device, fence, null);
             }
 
             _vk.FreeCommandBuffers(_device, _transferCommandPool, 1, in commandBuffer);
@@ -812,6 +955,9 @@ public sealed unsafe class VulkanContext : IDisposable
         {
             _vk.DeviceWaitIdle(_device);
         }
+
+        DeletionQueue.FlushAll();
+        SaveAndDestroyPipelineCache();
 
         if (_transferCommandPool.Handle != 0)
         {

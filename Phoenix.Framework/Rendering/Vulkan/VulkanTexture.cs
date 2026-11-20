@@ -28,6 +28,7 @@ public sealed unsafe class VulkanTexture : IDisposable
     private readonly uint _textureId;
     private readonly bool _ownsSlot;
     private readonly Sampler _sampler;
+    private readonly Dictionary<(uint Mip, uint Layer), ImageView> _subViews = new();
     private bool _disposed;
 
     public bool IsDisposed => _disposed;
@@ -42,6 +43,7 @@ public sealed unsafe class VulkanTexture : IDisposable
     public Format Format => _format;
     public uint TextureId => _textureId;
     public TextureLoadOptions Options { get; }
+    public ImageLayout CurrentLayout { get; internal set; } = ImageLayout.Undefined;
 
     /// <summary>
     /// Creates a GPU image, uploads raw pixel data via a staging buffer with optional GPU mipmap generation,
@@ -170,30 +172,7 @@ public sealed unsafe class VulkanTexture : IDisposable
         var sDesc = samplerDesc ?? SamplerDescription.LinearClamp;
         _sampler = _bindlessManager.SamplerManager.GetOrCreateSampler(sDesc);
         _textureId = _bindlessManager.RegisterTexture(_imageView, in sDesc);
-
-        var cmd = _context.BeginSingleTimeCommands();
-        ImageMemoryBarrier2 barrier = new()
-        {
-            SType = StructureType.ImageMemoryBarrier2,
-            SrcStageMask = PipelineStageFlags2.TopOfPipeBit,
-            SrcAccessMask = AccessFlags2.None,
-            DstStageMask = PipelineStageFlags2.FragmentShaderBit | PipelineStageFlags2.ComputeShaderBit,
-            DstAccessMask = AccessFlags2.ShaderReadBit,
-            OldLayout = ImageLayout.Undefined,
-            NewLayout = ImageLayout.ShaderReadOnlyOptimal,
-            Image = _image,
-            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1)
-        };
-
-        DependencyInfo dep = new()
-        {
-            SType = StructureType.DependencyInfo,
-            ImageMemoryBarrierCount = 1,
-            PImageMemoryBarriers = &barrier
-        };
-
-        _context.Vk.CmdPipelineBarrier2(cmd, in dep);
-        _context.EndSingleTimeCommands(cmd);
+        CurrentLayout = ImageLayout.Undefined;
     }
 
 
@@ -206,6 +185,9 @@ public sealed unsafe class VulkanTexture : IDisposable
         if (mipLevels > 1)
             usage |= ImageUsageFlags.TransferSrcBit;
 
+        bool isConcurrent = _context.TransferFamilyIndex.HasValue && _context.TransferFamilyIndex.Value != _context.GraphicsFamilyIndex;
+        uint* queueFamilies = stackalloc uint[2] { _context.GraphicsFamilyIndex, _context.TransferFamilyIndex ?? 0 };
+
         ImageCreateInfo imageInfo = new()
         {
             SType = StructureType.ImageCreateInfo,
@@ -217,7 +199,9 @@ public sealed unsafe class VulkanTexture : IDisposable
             Tiling = ImageTiling.Optimal,
             InitialLayout = ImageLayout.Undefined,
             Usage = usage,
-            SharingMode = SharingMode.Exclusive,
+            SharingMode = isConcurrent ? SharingMode.Concurrent : SharingMode.Exclusive,
+            QueueFamilyIndexCount = isConcurrent ? 2u : 0u,
+            PQueueFamilyIndices = isConcurrent ? queueFamilies : null,
             Samples = SampleCountFlags.Count1Bit
         };
 
@@ -291,33 +275,15 @@ public sealed unsafe class VulkanTexture : IDisposable
         }
         else
         {
-            ImageMemoryBarrier2 barrierToShader = new()
-            {
-                SType = StructureType.ImageMemoryBarrier2,
-                SrcStageMask = PipelineStageFlags2.TransferBit,
-                SrcAccessMask = AccessFlags2.TransferWriteBit,
-                DstStageMask = PipelineStageFlags2.FragmentShaderBit,
-                DstAccessMask = AccessFlags2.ShaderReadBit,
-                OldLayout = ImageLayout.TransferDstOptimal,
-                NewLayout = ImageLayout.ShaderReadOnlyOptimal,
-                Image = _image,
-                SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, 1, 0, 1)
-            };
-
-            DependencyInfo depToShader = new()
-            {
-                SType = StructureType.DependencyInfo,
-                ImageMemoryBarrierCount = 1,
-                PImageMemoryBarriers = &barrierToShader
-            };
-
-            _context.Vk.CmdPipelineBarrier2(cmd, in depToShader);
+            TransitionImageLayout(cmd, ImageLayout.TransferDstOptimal, ImageLayout.ShaderReadOnlyOptimal, 1, useTransferQueue);
         }
 
         if (useTransferQueue)
             _context.EndTransferCommands(cmd);
         else
             _context.EndSingleTimeCommands(cmd);
+
+        CurrentLayout = ImageLayout.ShaderReadOnlyOptimal;
     }
 
     /// <summary>
@@ -386,29 +352,84 @@ public sealed unsafe class VulkanTexture : IDisposable
             _context.Vk.CmdCopyBufferToImage(cmd, stagingBuffer.Buffer, _image, ImageLayout.TransferDstOptimal, (uint)copyRegions.Length, pRegions);
         }
 
-        ImageMemoryBarrier2 barrierToShader = new()
+        TransitionImageLayout(cmd, ImageLayout.TransferDstOptimal, ImageLayout.ShaderReadOnlyOptimal, _mipLevels, useTransferQueue: true);
+
+        _context.EndTransferCommands(cmd);
+
+        CurrentLayout = ImageLayout.ShaderReadOnlyOptimal;
+    }
+
+    /// <summary>
+    /// Records a pipeline barrier transition for an image layout on the given command buffer.
+    /// Handles transfer queue capabilities when transitioning to ShaderReadOnlyOptimal.
+    /// </summary>
+    public void TransitionImageLayout(CommandBuffer cmd, ImageLayout oldLayout, ImageLayout newLayout,
+        uint mipLevels = 1, bool useTransferQueue = false)
+    {
+        PipelineStageFlags2 dstStage = PipelineStageFlags2.FragmentShaderBit;
+        AccessFlags2 dstAccess = AccessFlags2.ShaderReadBit;
+
+        if (oldLayout == ImageLayout.TransferDstOptimal && newLayout == ImageLayout.ShaderReadOnlyOptimal)
+        {
+            bool isSeparateTransfer = useTransferQueue && _context.TransferFamilyIndex.HasValue && _context.TransferFamilyIndex.Value != _context.GraphicsFamilyIndex;
+            if (isSeparateTransfer)
+            {
+                dstStage = PipelineStageFlags2.AllCommandsBit;
+                dstAccess = AccessFlags2.None;
+            }
+        }
+
+        ImageMemoryBarrier2 barrier = new()
         {
             SType = StructureType.ImageMemoryBarrier2,
             SrcStageMask = PipelineStageFlags2.TransferBit,
             SrcAccessMask = AccessFlags2.TransferWriteBit,
-            DstStageMask = PipelineStageFlags2.FragmentShaderBit,
-            DstAccessMask = AccessFlags2.ShaderReadBit,
-            OldLayout = ImageLayout.TransferDstOptimal,
-            NewLayout = ImageLayout.ShaderReadOnlyOptimal,
+            DstStageMask = dstStage,
+            DstAccessMask = dstAccess,
+            OldLayout = oldLayout,
+            NewLayout = newLayout,
+            Image = _image,
+            SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, mipLevels, 0, 1)
+        };
+
+        DependencyInfo dep = new()
+        {
+            SType = StructureType.DependencyInfo,
+            ImageMemoryBarrierCount = 1,
+            PImageMemoryBarriers = &barrier
+        };
+
+        _context.Vk.CmdPipelineBarrier2(cmd, in dep);
+        CurrentLayout = newLayout;
+    }
+
+    /// <summary>
+    /// Transitions image layout using the current tracked layout as the OldLayout.
+    /// </summary>
+    public void TransitionLayout(CommandBuffer cmd, ImageLayout newLayout, PipelineStageFlags2 srcStage, AccessFlags2 srcAccess, PipelineStageFlags2 dstStage, AccessFlags2 dstAccess)
+    {
+        ImageMemoryBarrier2 barrier = new()
+        {
+            SType = StructureType.ImageMemoryBarrier2,
+            SrcStageMask = srcStage,
+            SrcAccessMask = srcAccess,
+            DstStageMask = dstStage,
+            DstAccessMask = dstAccess,
+            OldLayout = CurrentLayout,
+            NewLayout = newLayout,
             Image = _image,
             SubresourceRange = new ImageSubresourceRange(ImageAspectFlags.ColorBit, 0, _mipLevels, 0, 1)
         };
 
-        DependencyInfo depToShader = new()
+        DependencyInfo dep = new()
         {
             SType = StructureType.DependencyInfo,
             ImageMemoryBarrierCount = 1,
-            PImageMemoryBarriers = &barrierToShader
+            PImageMemoryBarriers = &barrier
         };
 
-        _context.Vk.CmdPipelineBarrier2(cmd, in depToShader);
-
-        _context.EndTransferCommands(cmd);
+        _context.Vk.CmdPipelineBarrier2(cmd, in dep);
+        CurrentLayout = newLayout;
     }
 
     /// <summary>
@@ -704,19 +725,31 @@ public sealed unsafe class VulkanTexture : IDisposable
         _width = width;
         _height = height;
 
-        if (_imageView.Handle != 0)
-        {
-            _context.Vk.DestroyImageView(_context.Device, _imageView, null);
-            _imageView = default;
-        }
+        var oldView = _imageView;
+        var oldImage = _image;
+        var oldAlloc = _allocation;
+        var oldSubViews = _subViews.Values.ToArray();
+        _subViews.Clear();
 
-        if (_image.Handle != 0)
+        _imageView = default;
+        _image = default;
+        _allocation = default;
+        _memory = default;
+
+        _context.DeletionQueue.Enqueue(_context.CurrentFrame, () =>
         {
-            VMA.DestroyImage(_context.Allocator, _image, _allocation);
-            _image = default;
-            _allocation = default;
-            _memory = default;
-        }
+            for (int i = 0; i < oldSubViews.Length; i++)
+            {
+                if (oldSubViews[i].Handle != 0)
+                    _context.Vk.DestroyImageView(_context.Device, oldSubViews[i], null);
+            }
+
+            if (oldView.Handle != 0)
+                _context.Vk.DestroyImageView(_context.Device, oldView, null);
+
+            if (oldImage.Handle != 0)
+                VMA.DestroyImage(_context.Allocator, oldImage, oldAlloc);
+        });
 
         ImageUsageFlags usage = ImageUsageFlags.ColorAttachmentBit |
                                 ImageUsageFlags.SampledBit |
@@ -754,7 +787,43 @@ public sealed unsafe class VulkanTexture : IDisposable
         _memory = allocDetails.DeviceMemory;
 
         CreateImageView(_format, 1);
+        CurrentLayout = ImageLayout.Undefined;
         _bindlessManager.UpdateDescriptor(_textureId, _imageView, _sampler);
+    }
+
+    /// <summary>
+    /// Returns a cached or newly created ImageView targeting a specific mipmap level and array layer.
+    /// </summary>
+    public ImageView GetMipLayerView(uint mipLevel, uint arrayLayer = 0)
+    {
+        var key = (mipLevel, arrayLayer);
+        if (_subViews.TryGetValue(key, out var cachedView))
+            return cachedView;
+
+        ImageViewCreateInfo viewInfo = new()
+        {
+            SType = StructureType.ImageViewCreateInfo,
+            Image = _image,
+            ViewType = ImageViewType.Type2D,
+            Format = _format,
+            Components = new ComponentMapping(
+                ComponentSwizzle.Identity,
+                ComponentSwizzle.Identity,
+                ComponentSwizzle.Identity,
+                ComponentSwizzle.Identity),
+            SubresourceRange = new ImageSubresourceRange(
+                ImageAspectFlags.ColorBit,
+                mipLevel,
+                1,
+                arrayLayer,
+                1)
+        };
+
+        VulkanHelper.Check(_context.Vk.CreateImageView(_context.Device, in viewInfo, null, out var subView),
+            $"Failed to create sub-view for mip {mipLevel}, layer {arrayLayer}.");
+
+        _subViews[key] = subView;
+        return subView;
     }
 
     /// <summary>
@@ -769,6 +838,15 @@ public sealed unsafe class VulkanTexture : IDisposable
         {
             _bindlessManager.UnregisterTexture(_textureId);
         }
+
+        foreach (var subView in _subViews.Values)
+        {
+            if (subView.Handle != 0)
+            {
+                _context.Vk.DestroyImageView(_context.Device, subView, null);
+            }
+        }
+        _subViews.Clear();
 
         if (_imageView.Handle != 0)
         {

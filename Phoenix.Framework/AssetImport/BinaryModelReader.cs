@@ -16,7 +16,12 @@ public static class BinaryModelReader
     public static Model Read(Graphics graphics, string path)
     {
         using var fs = File.OpenRead(path);
-        using var br = new BinaryReader(fs);
+        return Read(fs, graphics, Path.GetDirectoryName(path));
+    }
+
+    public static Model Read(Stream stream, Graphics graphics, string? directory = null)
+    {
+        using var br = new BinaryReader(stream);
 
         string magic = br.ReadString();
         if (magic != "PHXM" && magic != "PMDL")
@@ -29,6 +34,8 @@ public static class BinaryModelReader
         bool isAnimated = br.ReadBoolean();
         bool tangents = br.ReadBoolean();
         int partsCount = br.ReadInt32();
+
+        using var uploadBatch = new VulkanUploadBatch(graphics.Context);
 
         List<ModelPart> parts = new(partsCount);
         for (int p = 0; p < partsCount; p++)
@@ -72,20 +79,22 @@ public static class BinaryModelReader
                     vertexBufferSize,
                     BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit,
                     MemoryPropertyFlags.DeviceLocalBit);
-                vertexBuffer.SetData<ModelVertex>(vertices.AsSpan());
+                uploadBatch.UploadBuffer<ModelVertex>(vertexBuffer, vertices);
 
                 ulong indexBufferSize = (ulong)(indices.Length * sizeof(uint));
                 var indexBuffer = graphics.CreateBuffer(
                     indexBufferSize,
                     BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit,
                     MemoryPropertyFlags.DeviceLocalBit);
-                indexBuffer.SetData<uint>(indices.AsSpan());
+                uploadBatch.UploadBuffer<uint>(indexBuffer, indices);
 
                 meshes.Add(new ModelMesh(meshName, vertexBuffer, indexBuffer, (uint)vertices.Length, (uint)indices.Length, transform, materialIndex, normalIndex));
             }
 
             parts.Add(new ModelPart(partName, meshes));
         }
+
+        uploadBatch.SubmitAndWait();
 
         bool hasTextures = br.ReadBoolean();
         List<string> texList = [];

@@ -1,3 +1,4 @@
+using Phoenix.Framework.Rendering.Geometry.Vertices;
 using Silk.NET.Vulkan;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -5,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace Phoenix.Framework.Rendering;
 
 [StructLayout(LayoutKind.Sequential)]
-public struct VertexPositionColorTexture
+public struct VertexPositionColorTexture : IVertexLayout
 {
     public Vector3 Position;
     public Vector4 Color;

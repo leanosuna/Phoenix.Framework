@@ -166,11 +166,8 @@ void main() {
         }
 
         ctx.BindPipeline(_pipeline);
-
-        Silk.NET.Vulkan.Buffer rawVtxBuffer = vtxBuffer.Buffer;
-        ulong rawOffset = 0;
-        vk.CmdBindVertexBuffers(cmd, 0, 1, in rawVtxBuffer, in rawOffset);
-        vk.CmdBindIndexBuffer(cmd, idxBuffer.Buffer, 0, IndexType.Uint16);
+        ctx.BindVertexBuffer(vtxBuffer);
+        ctx.BindIndexBuffer(idxBuffer, IndexType.Uint16);
 
         Viewport viewport = new(0, 0, drawData.DisplaySize.X, drawData.DisplaySize.Y, 0.0f, 1.0f);
         vk.CmdSetViewport(cmd, 0, 1, in viewport);

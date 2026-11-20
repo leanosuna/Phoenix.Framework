@@ -69,15 +69,55 @@ public class Animation
         }
     }
 
-    private int GetStartingIndex(float time, Keyframe[] keys)
+    private static int GetStartingIndex(float time, Keyframe[] keys)
     {
-        if (keys.Length == 0) return 0;
-        for (int index = 0; index < keys.Length - 1; index++)
+        if (keys.Length <= 1) return 0;
+        int low = 0;
+        int high = keys.Length - 2;
+        int result = 0;
+
+        while (low <= high)
         {
-            if (time < keys[index + 1].TimeStamp)
-                return index;
+            int mid = low + (high - low) / 2;
+            if (keys[mid].TimeStamp <= time)
+            {
+                result = mid;
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid - 1;
+            }
         }
-        return Math.Max(0, keys.Length - 2);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Binary searches a sorted keyframe list for the interval index containing the timestamp.
+    /// </summary>
+    public static int GetStartingIndex<T>(List<T> list, float time, Func<T, float> getTime)
+    {
+        if (list.Count <= 1) return 0;
+        int low = 0;
+        int high = list.Count - 2;
+        int result = 0;
+
+        while (low <= high)
+        {
+            int mid = low + (high - low) / 2;
+            if (getTime(list[mid]) <= time)
+            {
+                result = mid;
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+
+        return result;
     }
 
     private Transform Interpolate(Keyframe current, Keyframe next, float time)
@@ -176,16 +216,7 @@ public class Animation
         if (keyframes.Length == 1)
             return keyframes[0].SRT;
 
-        int i0 = keyframes.Length - 2;
-        for (int i = 0; i < keyframes.Length - 1; i++)
-        {
-            if (time < keyframes[i + 1].TimeStamp)
-            {
-                i0 = i;
-                break;
-            }
-        }
-
+        int i0 = GetStartingIndex(time, keyframes);
         int i1 = Math.Min(i0 + 1, keyframes.Length - 1);
         var k0 = keyframes[i0];
         var k1 = keyframes[i1];

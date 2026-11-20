@@ -8,14 +8,17 @@ namespace Phoenix.Framework.Rendering.Vulkan;
 /// </summary>
 internal sealed unsafe class FrameUniformsManager : IDisposable
 {
+    public const int MaxViewsPerFrame = 32;
     private readonly VulkanContext _context;
     private DescriptorSetLayout _descriptorSetLayout;
     private DescriptorPool _descriptorPool;
     private readonly DescriptorSet[] _descriptorSets = new DescriptorSet[VulkanSwapchain.MaxFramesInFlight];
     private readonly VulkanBuffer[] _uboBuffers = new VulkanBuffer[VulkanSwapchain.MaxFramesInFlight];
+    private readonly int[] _frameSlotIndex = new int[VulkanSwapchain.MaxFramesInFlight];
     private bool _disposed;
 
     public DescriptorSetLayout DescriptorSetLayout => _descriptorSetLayout;
+    public FrameUniforms CurrentUniforms { get; private set; }
 
     /// <summary>
     /// Returns the descriptor set for the specified frame in flight.
@@ -35,16 +38,16 @@ internal sealed unsafe class FrameUniformsManager : IDisposable
     }
 
     /// <summary>
-    /// Creates the descriptor set layout with a single uniform buffer binding at binding 0.
+    /// Creates the descriptor set layout with a single dynamic uniform buffer binding at binding 0.
     /// </summary>
     private void CreateDescriptorSetLayout()
     {
         DescriptorSetLayoutBinding binding = new()
         {
             Binding = 0,
-            DescriptorType = DescriptorType.UniformBuffer,
+            DescriptorType = DescriptorType.UniformBufferDynamic,
             DescriptorCount = 1,
-            StageFlags = ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit
+            StageFlags = ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit | ShaderStageFlags.ComputeBit
         };
 
         DescriptorSetLayoutCreateInfo layoutInfo = new()
@@ -59,13 +62,13 @@ internal sealed unsafe class FrameUniformsManager : IDisposable
     }
 
     /// <summary>
-    /// Creates the descriptor pool capable of allocating uniform buffer descriptor sets for all frames in flight.
+    /// Creates the descriptor pool capable of allocating dynamic uniform buffer descriptor sets for all frames in flight.
     /// </summary>
     private void CreateDescriptorPool()
     {
         DescriptorPoolSize poolSize = new()
         {
-            Type = DescriptorType.UniformBuffer,
+            Type = DescriptorType.UniformBufferDynamic,
             DescriptorCount = VulkanSwapchain.MaxFramesInFlight
         };
 
@@ -86,13 +89,14 @@ internal sealed unsafe class FrameUniformsManager : IDisposable
     /// </summary>
     private void CreateBuffersAndSets()
     {
-        ulong uboSize = (ulong)sizeof(FrameUniforms);
+        ulong slotSize = (ulong)sizeof(FrameUniforms);
+        ulong totalBufferSize = slotSize * MaxViewsPerFrame;
         DescriptorSetLayout* layouts = stackalloc DescriptorSetLayout[VulkanSwapchain.MaxFramesInFlight];
 
         for (int i = 0; i < VulkanSwapchain.MaxFramesInFlight; i++)
         {
             layouts[i] = _descriptorSetLayout;
-            _uboBuffers[i] = new VulkanBuffer(_context, uboSize, BufferUsageFlags.UniformBufferBit,
+            _uboBuffers[i] = new VulkanBuffer(_context, totalBufferSize, BufferUsageFlags.UniformBufferBit,
                 MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
         }
 
@@ -116,7 +120,7 @@ internal sealed unsafe class FrameUniformsManager : IDisposable
             {
                 Buffer = _uboBuffers[i].Buffer,
                 Offset = 0,
-                Range = uboSize
+                Range = slotSize
             };
 
             WriteDescriptorSet write = new()
@@ -125,7 +129,7 @@ internal sealed unsafe class FrameUniformsManager : IDisposable
                 DstSet = _descriptorSets[i],
                 DstBinding = 0,
                 DstArrayElement = 0,
-                DescriptorType = DescriptorType.UniformBuffer,
+                DescriptorType = DescriptorType.UniformBufferDynamic,
                 DescriptorCount = 1,
                 PBufferInfo = &bufferInfo
             };
@@ -135,12 +139,31 @@ internal sealed unsafe class FrameUniformsManager : IDisposable
     }
 
     /// <summary>
-    /// Uploads frame uniform values into the uniform buffer assigned to the current frame in flight.
+    /// Uploads frame uniform values into slot 0 of the uniform buffer assigned to the current frame in flight.
     /// </summary>
     public void Update(int frameIndex, in FrameUniforms uniforms)
     {
+        _frameSlotIndex[frameIndex] = 0;
+        CurrentUniforms = uniforms;
         ReadOnlySpan<FrameUniforms> span = new(in uniforms);
-        _uboBuffers[frameIndex].SetData(span);
+        _uboBuffers[frameIndex].SetData(span, 0);
+    }
+
+    /// <summary>
+    /// Allocates a new view slot for the current frame, writes uniform data, and returns the byte offset for dynamic binding.
+    /// </summary>
+    public uint AllocateAndWrite(int frameIndex, in FrameUniforms uniforms)
+    {
+        int slot = _frameSlotIndex[frameIndex] + 1;
+        if (slot >= MaxViewsPerFrame)
+            throw new InvalidOperationException($"Exceeded maximum views per frame ({MaxViewsPerFrame}).");
+
+        _frameSlotIndex[frameIndex] = slot;
+        CurrentUniforms = uniforms;
+        uint byteOffset = (uint)(slot * sizeof(FrameUniforms));
+        ReadOnlySpan<FrameUniforms> span = new(in uniforms);
+        _uboBuffers[frameIndex].SetData(span, byteOffset);
+        return byteOffset;
     }
 
     /// <summary>

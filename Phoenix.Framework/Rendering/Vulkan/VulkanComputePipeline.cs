@@ -77,7 +77,7 @@ public sealed unsafe class VulkanComputePipeline : IDisposable
                 Layout = _layout
             };
 
-            VulkanHelper.Check(_context.Vk.CreateComputePipelines(_context.Device, default, 1, in pipelineInfo, null, out _pipeline),
+            VulkanHelper.Check(_context.Vk.CreateComputePipelines(_context.Device, _context.PipelineCache, 1, in pipelineInfo, null, out _pipeline),
                 "Failed to create compute pipeline.");
         }
         finally

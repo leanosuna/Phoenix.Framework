@@ -14,6 +14,16 @@ public sealed unsafe class VulkanPipeline : IDisposable
     public PipelineLayout Layout => _layout;
     public PipelineBindPoint BindPoint => PipelineBindPoint.Graphics;
     public uint DescriptorSetCount { get; private set; }
+    public CullModeFlags DefaultCullMode { get; }
+    public FrontFace DefaultFrontFace { get; }
+    public bool DefaultDepthTestEnable { get; }
+    public bool DefaultDepthWriteEnable { get; }
+    public CompareOp DefaultDepthCompareOp { get; }
+    public bool DefaultDepthBiasEnable { get; }
+    public float DefaultDepthBiasConstant { get; }
+    public float DefaultDepthBiasSlope { get; }
+    public float DefaultDepthBiasClamp { get; }
+    public ShaderStageFlags PushConstantStages { get; }
 
     /// <summary>
     /// Compiles shader modules and builds a Vulkan graphics pipeline with dynamic rendering and configurable pipeline state.
@@ -21,6 +31,16 @@ public sealed unsafe class VulkanPipeline : IDisposable
     public VulkanPipeline(VulkanContext context, VulkanPipelineDescription desc)
     {
         _context = context;
+        DefaultCullMode = desc.CullMode;
+        DefaultFrontFace = desc.FrontFace;
+        DefaultDepthTestEnable = desc.DepthTestEnable;
+        DefaultDepthWriteEnable = desc.DepthWriteEnable;
+        DefaultDepthCompareOp = desc.DepthCompareOp;
+        DefaultDepthBiasEnable = desc.DepthBiasEnable;
+        DefaultDepthBiasConstant = desc.DepthBiasConstantFactor;
+        DefaultDepthBiasSlope = desc.DepthBiasSlopeFactor;
+        DefaultDepthBiasClamp = desc.DepthBiasClamp;
+        PushConstantStages = desc.PushConstantStages;
 
         CreatePipelineLayout(desc);
         CreateGraphicsPipeline(desc);
@@ -35,7 +55,7 @@ public sealed unsafe class VulkanPipeline : IDisposable
 
         PushConstantRange pushRange = new()
         {
-            StageFlags = ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit,
+            StageFlags = desc.PushConstantStages,
             Offset = 0,
             Size = desc.PushConstantsSize
         };
@@ -61,8 +81,9 @@ public sealed unsafe class VulkanPipeline : IDisposable
     /// </summary>
     private void CreateGraphicsPipeline(VulkanPipelineDescription desc)
     {
+        bool hasFragment = desc.FragmentShaderSpv != null && desc.FragmentShaderSpv.Length > 0;
         var vertModule = CreateShaderModule(desc.VertexShaderSpv);
-        var fragModule = CreateShaderModule(desc.FragmentShaderSpv);
+        var fragModule = hasFragment ? CreateShaderModule(desc.FragmentShaderSpv!) : default;
 
         byte* mainName = (byte*)SilkMarshal.StringToPtr("main");
 
@@ -74,15 +95,25 @@ public sealed unsafe class VulkanPipeline : IDisposable
             PName = mainName
         };
 
-        PipelineShaderStageCreateInfo fragStage = new()
+        PipelineShaderStageCreateInfo fragStage = default;
+        if (hasFragment)
         {
-            SType = StructureType.PipelineShaderStageCreateInfo,
-            Stage = ShaderStageFlags.FragmentBit,
-            Module = fragModule,
-            PName = mainName
-        };
+            fragStage = new()
+            {
+                SType = StructureType.PipelineShaderStageCreateInfo,
+                Stage = ShaderStageFlags.FragmentBit,
+                Module = fragModule,
+                PName = mainName
+            };
+        }
 
-        PipelineShaderStageCreateInfo* stages = stackalloc PipelineShaderStageCreateInfo[] { vertStage, fragStage };
+        uint stageCount = hasFragment ? 2u : 1u;
+        PipelineShaderStageCreateInfo* stages = stackalloc PipelineShaderStageCreateInfo[(int)stageCount];
+        stages[0] = vertStage;
+        if (hasFragment)
+        {
+            stages[1] = fragStage;
+        }
 
         fixed (VertexInputBindingDescription* pBindings = desc.VertexBindings)
         fixed (VertexInputAttributeDescription* pAttributes = desc.VertexAttributes)
@@ -119,7 +150,10 @@ public sealed unsafe class VulkanPipeline : IDisposable
                 LineWidth = 1.0f,
                 CullMode = desc.CullMode,
                 FrontFace = desc.FrontFace,
-                DepthBiasEnable = false
+                DepthBiasEnable = desc.DepthBiasEnable,
+                DepthBiasConstantFactor = desc.DepthBiasConstantFactor,
+                DepthBiasSlopeFactor = desc.DepthBiasSlopeFactor,
+                DepthBiasClamp = desc.DepthBiasClamp
             };
 
             PipelineMultisampleStateCreateInfo multisampling = new()
@@ -139,21 +173,64 @@ public sealed unsafe class VulkanPipeline : IDisposable
                 StencilTestEnable = false
             };
 
-            Format[] colorFormats = desc.ColorFormats.Length > 0 ? desc.ColorFormats : [desc.ColorFormat];
+            Format[] colorFormats;
+            if (desc.ColorFormats.Length > 0)
+            {
+                colorFormats = desc.ColorFormats;
+            }
+            else if (desc.ColorFormat != Format.Undefined)
+            {
+                colorFormats = [desc.ColorFormat];
+            }
+            else
+            {
+                colorFormats = [];
+            }
+
+            BlendMode effectiveBlend = desc.BlendMode ?? (desc.BlendEnable ? BlendMode.AlphaBlend : BlendMode.Opaque);
             PipelineColorBlendAttachmentState[] blendAttachments = new PipelineColorBlendAttachmentState[colorFormats.Length];
             for (int i = 0; i < colorFormats.Length; i++)
             {
-                blendAttachments[i] = new PipelineColorBlendAttachmentState
+                PipelineColorBlendAttachmentState attachment = new()
                 {
-                    ColorWriteMask = ColorComponentFlags.RBit | ColorComponentFlags.GBit | ColorComponentFlags.BBit | ColorComponentFlags.ABit,
-                    BlendEnable = desc.BlendEnable,
-                    SrcColorBlendFactor = BlendFactor.SrcAlpha,
-                    DstColorBlendFactor = BlendFactor.OneMinusSrcAlpha,
-                    ColorBlendOp = BlendOp.Add,
-                    SrcAlphaBlendFactor = BlendFactor.One,
-                    DstAlphaBlendFactor = BlendFactor.Zero,
-                    AlphaBlendOp = BlendOp.Add
+                    ColorWriteMask = ColorComponentFlags.RBit | ColorComponentFlags.GBit | ColorComponentFlags.BBit | ColorComponentFlags.ABit
                 };
+
+                switch (effectiveBlend)
+                {
+                    case BlendMode.Opaque:
+                        attachment.BlendEnable = false;
+                        break;
+                    case BlendMode.AlphaBlend:
+                        attachment.BlendEnable = true;
+                        attachment.SrcColorBlendFactor = BlendFactor.SrcAlpha;
+                        attachment.DstColorBlendFactor = BlendFactor.OneMinusSrcAlpha;
+                        attachment.ColorBlendOp = BlendOp.Add;
+                        attachment.SrcAlphaBlendFactor = BlendFactor.One;
+                        attachment.DstAlphaBlendFactor = BlendFactor.OneMinusSrcAlpha;
+                        attachment.AlphaBlendOp = BlendOp.Add;
+                        break;
+                    case BlendMode.Additive:
+                        attachment.BlendEnable = true;
+                        attachment.SrcColorBlendFactor = BlendFactor.SrcAlpha;
+                        attachment.DstColorBlendFactor = BlendFactor.One;
+                        attachment.ColorBlendOp = BlendOp.Add;
+                        attachment.SrcAlphaBlendFactor = BlendFactor.One;
+                        attachment.DstAlphaBlendFactor = BlendFactor.One;
+                        attachment.AlphaBlendOp = BlendOp.Add;
+                        break;
+                    case BlendMode.Premultiplied:
+                        attachment.BlendEnable = true;
+                        attachment.SrcColorBlendFactor = BlendFactor.One;
+                        attachment.DstColorBlendFactor = BlendFactor.OneMinusSrcAlpha;
+                        attachment.ColorBlendOp = BlendOp.Add;
+                        attachment.SrcAlphaBlendFactor = BlendFactor.One;
+                        attachment.DstAlphaBlendFactor = BlendFactor.OneMinusSrcAlpha;
+                        attachment.AlphaBlendOp = BlendOp.Add;
+                        break;
+                }
+
+                blendAttachments[i] = attachment;
             }
 
             fixed (PipelineColorBlendAttachmentState* pBlendAttachments = blendAttachments)
@@ -164,19 +241,25 @@ public sealed unsafe class VulkanPipeline : IDisposable
                     SType = StructureType.PipelineColorBlendStateCreateInfo,
                     LogicOpEnable = false,
                     AttachmentCount = (uint)colorFormats.Length,
-                    PAttachments = pBlendAttachments
+                    PAttachments = colorFormats.Length > 0 ? pBlendAttachments : null
                 };
 
                 DynamicState* dynamicStates = stackalloc DynamicState[]
                 {
                     DynamicState.Viewport,
-                    DynamicState.Scissor
+                    DynamicState.Scissor,
+                    DynamicState.CullMode,
+                    DynamicState.FrontFace,
+                    DynamicState.DepthTestEnable,
+                    DynamicState.DepthWriteEnable,
+                    DynamicState.DepthCompareOp,
+                    DynamicState.DepthBias
                 };
 
                 PipelineDynamicStateCreateInfo dynamicStateInfo = new()
                 {
                     SType = StructureType.PipelineDynamicStateCreateInfo,
-                    DynamicStateCount = 2,
+                    DynamicStateCount = 8,
                     PDynamicStates = dynamicStates
                 };
 
@@ -184,38 +267,41 @@ public sealed unsafe class VulkanPipeline : IDisposable
                 {
                     SType = StructureType.PipelineRenderingCreateInfo,
                     ColorAttachmentCount = (uint)colorFormats.Length,
-                    PColorAttachmentFormats = pColorFormats,
+                    PColorAttachmentFormats = colorFormats.Length > 0 ? pColorFormats : null,
                     DepthAttachmentFormat = desc.DepthFormat
                 };
 
-            GraphicsPipelineCreateInfo pipelineInfo = new()
-            {
-                SType = StructureType.GraphicsPipelineCreateInfo,
-                PNext = &renderingInfo,
-                StageCount = 2,
-                PStages = stages,
-                PVertexInputState = &vertexInputInfo,
-                PInputAssemblyState = &inputAssembly,
-                PViewportState = &viewportState,
-                PRasterizationState = &rasterizer,
-                PMultisampleState = &multisampling,
-                PDepthStencilState = &depthStencil,
-                PColorBlendState = &colorBlending,
-                PDynamicState = &dynamicStateInfo,
-                Layout = _layout,
-                RenderPass = default,
-                Subpass = 0
-            };
+                GraphicsPipelineCreateInfo pipelineInfo = new()
+                {
+                    SType = StructureType.GraphicsPipelineCreateInfo,
+                    PNext = &renderingInfo,
+                    StageCount = stageCount,
+                    PStages = stages,
+                    PVertexInputState = &vertexInputInfo,
+                    PInputAssemblyState = &inputAssembly,
+                    PViewportState = &viewportState,
+                    PRasterizationState = &rasterizer,
+                    PMultisampleState = &multisampling,
+                    PDepthStencilState = &depthStencil,
+                    PColorBlendState = &colorBlending,
+                    PDynamicState = &dynamicStateInfo,
+                    Layout = _layout,
+                    RenderPass = default,
+                    Subpass = 0
+                };
 
-            VulkanHelper.Check(_context.Vk.CreateGraphicsPipelines(_context.Device, default, 1, in pipelineInfo, null, out _pipeline),
-                "Failed to create Vulkan graphics pipeline.");
+                VulkanHelper.Check(_context.Vk.CreateGraphicsPipelines(_context.Device, _context.PipelineCache, 1, in pipelineInfo, null, out _pipeline),
+                    "Failed to create Vulkan graphics pipeline.");
 
-            SilkMarshal.Free((nint)mainName);
-            _context.Vk.DestroyShaderModule(_context.Device, vertModule, null);
-            _context.Vk.DestroyShaderModule(_context.Device, fragModule, null);
+                SilkMarshal.Free((nint)mainName);
+                _context.Vk.DestroyShaderModule(_context.Device, vertModule, null);
+                if (hasFragment)
+                {
+                    _context.Vk.DestroyShaderModule(_context.Device, fragModule, null);
+                }
+            }
         }
     }
-}
 
     /// <summary>
     /// Creates a VkShaderModule handle from raw SPIR-V bytecode.

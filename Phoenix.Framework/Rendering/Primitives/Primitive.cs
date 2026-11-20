@@ -43,11 +43,65 @@ public abstract class Primitive : IDisposable
     public ModelMesh? Mesh => _mesh;
 
     /// <summary>
+    /// Gets the total index count of the generated primitive.
+    /// </summary>
+    public uint IndexCount => _mesh?.IndexCount ?? (uint)_indexData.Length;
+
+    /// <summary>
+    /// Gets the allocated GPU vertex buffer.
+    /// </summary>
+    public VulkanBuffer? VertexBuffer => _mesh?.VertexBuffer;
+
+    /// <summary>
+    /// Gets the allocated GPU index buffer.
+    /// </summary>
+    public VulkanBuffer? IndexBuffer => _mesh?.IndexBuffer;
+
+    /// <summary>
     /// Binds vertex and index buffers and issues an indexed draw call into the active render pass.
     /// </summary>
     public void Draw(RenderContext rc)
     {
         _mesh?.Draw(rc);
+    }
+
+    /// <summary>
+    /// Draws the primitive using the specified pipeline, world transform, and optional albedo texture index.
+    /// </summary>
+    public void Draw(RenderContext rc, VulkanPipeline pipeline, in Matrix4x4 world, uint albedoIndex = 0)
+    {
+        if (_mesh == null)
+            return;
+
+        uint albedo = albedoIndex == 0 ? (_graphics?.DefaultWhiteTexture?.TextureId ?? 0) : albedoIndex;
+        PushConstantsData push = new(world, albedoIndex: albedo);
+
+        rc.BindPipeline(pipeline);
+        rc.PushConstants(pipeline, in push);
+        if (_mesh.VertexBuffer != null && _mesh.IndexBuffer != null)
+        {
+            rc.BindVertexBuffer(_mesh.VertexBuffer);
+            rc.BindIndexBuffer(_mesh.IndexBuffer);
+            rc.DrawIndexed(_mesh.IndexCount);
+        }
+    }
+
+    /// <summary>
+    /// Draws the primitive using the specified pipeline and custom push constants data.
+    /// </summary>
+    public void Draw<TPush>(RenderContext rc, VulkanPipeline pipeline, in TPush pushConstants) where TPush : unmanaged
+    {
+        if (_mesh == null)
+            return;
+
+        rc.BindPipeline(pipeline);
+        rc.PushConstants(pipeline, in pushConstants);
+        if (_mesh.VertexBuffer != null && _mesh.IndexBuffer != null)
+        {
+            rc.BindVertexBuffer(_mesh.VertexBuffer);
+            rc.BindIndexBuffer(_mesh.IndexBuffer);
+            rc.DrawIndexed(_mesh.IndexCount);
+        }
     }
 
     /// <summary>
@@ -146,16 +200,16 @@ public abstract class Primitive : IDisposable
         var vtxBuffer = new VulkanBuffer(
             _graphics.Context,
             (ulong)_vertexData.Length,
-            BufferUsageFlags.VertexBufferBit,
-            MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
-        vtxBuffer.SetData<byte>(_vertexData);
+            BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit,
+            MemoryPropertyFlags.DeviceLocalBit);
+        vtxBuffer.SetData<byte>(_vertexData.AsSpan());
 
         var idxBuffer = new VulkanBuffer(
             _graphics.Context,
             (ulong)(_indexData.Length * sizeof(uint)),
-            BufferUsageFlags.IndexBufferBit,
-            MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit);
-        idxBuffer.SetData<uint>(_indexData);
+            BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit,
+            MemoryPropertyFlags.DeviceLocalBit);
+        idxBuffer.SetData<uint>(_indexData.AsSpan());
 
         uint vtxCount = (uint)(_vertexData.Length / _vertexDeclaration.StrideBytes);
         _mesh = new ModelMesh(GetType().Name, vtxBuffer, idxBuffer, vtxCount, (uint)_indexData.Length, Matrix4x4.Identity);
